@@ -1,16 +1,15 @@
 import { useAccount, useConnect, useDisconnect, Connector } from 'wagmi'
 import { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
-import { useWriteContract } from 'wagmi' // Updated import
+import { useWriteContract } from 'wagmi'
 import { bitRWABridgeABI } from '../abis/bitRWABridgeABI'
-
 
 type WalletHookReturn = {
   address: `0x${string}` | undefined
   isConnected: boolean
   bitmaskAddress: string
   error: string
-  connectWallet: () => Promise<void>
+  connectWallet: (connectorId?: string) => Promise<void>
   disconnectWallet: () => void
   validateBitmaskAddress: (address: string) => boolean
   setBitmaskAddress: (address: string) => void
@@ -19,6 +18,7 @@ type WalletHookReturn = {
   isBound: boolean
   walletName: string
   isInjectedWallet: boolean
+  availableConnectors: Connector[]
 }
 
 const BITRWA_BRIDGE_ADDRESS = '0xYourContractAddress'
@@ -27,33 +27,35 @@ export const useWallet = (): WalletHookReturn => {
   const { address, isConnected, connector: activeConnector } = useAccount()
   const { connect, connectors } = useConnect()
   const { disconnect } = useDisconnect()
-  const { writeContractAsync } = useWriteContract() // Updated hook
+  const { writeContractAsync } = useWriteContract()
   const [bitmaskAddress, setBitmaskAddress] = useState<string>('')
   const [error, setError] = useState<string>('')
   const [isInjectedWallet, setIsInjectedWallet] = useState<boolean>(false)
   const [isBinding, setIsBinding] = useState<boolean>(false)
   const [isBound, setIsBound] = useState<boolean>(false)
-
-  // Setup contract write configuration
-  // const { config: bindConfig } = usePrepareContractWrite({
-  //   address: BITRWA_BRIDGE_ADDRESS,
-  //   abi: bitRWABridgeABI,
-  //   functionName: 'bindBitmaskWallet',
-  //   args: [bitmaskAddress],
-  //   enabled: Boolean(bitmaskAddress) && isConnected,
-  // })
-
-  // const { writeAsync: bindWalletContract } = useContractWrite(bindConfig)
+  const [availableConnectors, setAvailableConnectors] = useState<Connector[]>([])
 
   useEffect(() => {
     const checkInjectedWallet = () => {
-      setIsInjectedWallet(Boolean(window.ethereum))
+      const hasInjected = Boolean(window.ethereum)
+      setIsInjectedWallet(hasInjected)
+      
+      // Filter out connectors that aren't available (like when wallets aren't installed)
+      const filteredConnectors = connectors.filter(connector => {
+        // For injected connectors, check if any wallet is injected
+        if (connector.id === 'injected') return hasInjected
+        
+        // For wallet connect and other connectors, we assume they're available
+        return true
+      })
+      
+      setAvailableConnectors(filteredConnectors)
     }
     
     checkInjectedWallet()
     const interval = setInterval(checkInjectedWallet, 1000)
     return () => clearInterval(interval)
-  }, [])
+  }, [connectors])
 
   // Check if wallet is already bound
   useEffect(() => {
@@ -61,8 +63,6 @@ export const useWallet = (): WalletHookReturn => {
       if (!address) return
       
       try {
-        // In a real app, you would query the contract here
-        // For now, we'll use a mock implementation
         const provider = new ethers.BrowserProvider(window.ethereum)
         const contract = new ethers.Contract(
           BITRWA_BRIDGE_ADDRESS,
@@ -73,7 +73,6 @@ export const useWallet = (): WalletHookReturn => {
         const boundAddress = await contract.bitmaskWalletBindings(address)
         setIsBound(boundAddress !== ethers.ZeroAddress)
         
-        // If bound, set the bitmask address
         if (isBound && boundAddress !== ethers.ZeroAddress) {
           setBitmaskAddress(boundAddress)
         }
@@ -85,23 +84,37 @@ export const useWallet = (): WalletHookReturn => {
     checkBoundStatus()
   }, [address, isConnected])
 
-  const connectWallet = async (): Promise<void> => {
+  const connectWallet = async (connectorId?: string): Promise<void> => {
     try {
       setError('')
       
+      if (connectorId) {
+        // Connect to the specified connector
+        const selectedConnector = connectors.find(c => c.id === connectorId)
+        if (!selectedConnector) {
+          throw new Error('Requested wallet connector not found')
+        }
+        await connect({ connector: selectedConnector })
+        return
+      }
+      
+      // If no connector specified, use the default behavior
       if (isInjectedWallet) {
-        const injectedConnector = connectors.find(
-          (c: Connector) => c.id === 'injected'
-        )
-        
+        const injectedConnector = connectors.find(c => c.id === 'injected')
         if (injectedConnector) {
           await connect({ connector: injectedConnector })
           return
         }
       }
 
-      if (connectors.length > 0) {
-        await connect({ connector: connectors[0] })
+      if (availableConnectors.length > 0) {
+        // If only one connector available, use that
+        if (availableConnectors.length === 1) {
+          await connect({ connector: availableConnectors[0] })
+        } else {
+          // Multiple connectors available but none specified - throw error
+          throw new Error('Multiple wallets detected. Please specify which wallet to connect.')
+        }
       } else {
         throw new Error('No wallet connectors available')
       }
@@ -119,7 +132,6 @@ export const useWallet = (): WalletHookReturn => {
   }
 
   const validateBitmaskAddress = (address: string): boolean => {
-    // Adjust this validation according to your Bitmask address requirements
     if (!address || address.length < 8 || address.length > 64) {
       setError('Invalid Bitmask address format')
       return false
@@ -189,6 +201,7 @@ export const useWallet = (): WalletHookReturn => {
     isBinding,
     isBound,
     walletName: activeConnector?.name || (isInjectedWallet ? 'Browser Wallet' : 'Not Connected'),
-    isInjectedWallet
+    isInjectedWallet,
+    availableConnectors
   }
 }
