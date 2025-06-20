@@ -150,7 +150,7 @@ export const WalletConnect: React.FC = () => {
               </div>
             ) : (
               <div className="bitmask-binding">
-                <h3>Link Your Bitmask Wallet</h3>
+                <h3 style={{fontSize: "0.9em"}}>Link Your Bitmask RootStock Address</h3>
                 <div className="input-group">
                   <input
                     type="text"
