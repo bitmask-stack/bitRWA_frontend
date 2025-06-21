@@ -1,4 +1,4 @@
-import { useAccount, useConnect, useDisconnect, Connector } from 'wagmi'
+import { useAccount, useConnect, useDisconnect, Connector, useBalance } from 'wagmi'
 import { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
 import { useWriteContract } from 'wagmi'
@@ -18,10 +18,11 @@ type WalletHookReturn = {
   isBound: boolean
   walletName: string
   isInjectedWallet: boolean
-  availableConnectors: Connector[]
+  availableConnectors: Connector[],
+  linkedAddressAmount: any
 }
 
-const BITRWA_BRIDGE_ADDRESS = '0xYourContractAddress'
+const BITRWA_BRIDGE_ADDRESS = '0x02CBDeFeBd06D5E946b72F86813A0e49Bf96a5D0'
 
 export const useWallet = (): WalletHookReturn => {
   const { address, isConnected, connector: activeConnector } = useAccount()
@@ -34,6 +35,7 @@ export const useWallet = (): WalletHookReturn => {
   const [isBinding, setIsBinding] = useState<boolean>(false)
   const [isBound, setIsBound] = useState<boolean>(false)
   const [availableConnectors, setAvailableConnectors] = useState<Connector[]>([])
+  const [linkedAddressAmount, setLinkedAddressAmount] = useState<any>(0)
 
   useEffect(() => {
     const checkInjectedWallet = () => {
@@ -69,12 +71,18 @@ export const useWallet = (): WalletHookReturn => {
           bitRWABridgeABI,
           provider
         )
+       
         
         const boundAddress = await contract.bitmaskWalletBindings(address)
-        setIsBound(boundAddress !== ethers.ZeroAddress)
+        console.log(boundAddress)
+        // setIsBound(boundAddress !== ethers.ZeroAddress)
+        setIsBound(false)
         
         if (isBound && boundAddress !== ethers.ZeroAddress) {
-          setBitmaskAddress(boundAddress)
+          const _boundAddress: any = localStorage.getItem("rootstockAddress")
+          const { data: balance } = useBalance({ address: _boundAddress })
+          setLinkedAddressAmount(balance)
+          setBitmaskAddress(_boundAddress)
         }
       } catch (err) {
         console.error('Error checking bound status:', err)
@@ -202,6 +210,7 @@ export const useWallet = (): WalletHookReturn => {
     isBound,
     walletName: activeConnector?.name || (isInjectedWallet ? 'Browser Wallet' : 'Not Connected'),
     isInjectedWallet,
-    availableConnectors
+    availableConnectors,
+    linkedAddressAmount
   }
 }

@@ -294,17 +294,7 @@
   cursor: not-allowed;
 }
 
-.bound-status {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  width: 100%;
-  margin: 1.5rem 0;
-  padding: 1.25rem;
-  background: rgba(0, 210, 255, 0.1);
-  border-radius: 16px;
-  border: 1px solid rgba(0, 210, 255, 0.2);
-}
+
 
 .bound-badge {
   color: #00d2ff;
@@ -324,6 +314,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+ 
+  
 }
 
 .address-label {
@@ -410,17 +402,19 @@
   opacity: 0.7;
   cursor: not-allowed;
 }
-
 .bound-status {
   display: flex;
   flex-direction: column;
   gap: 1rem;
   width: 100%;
+  max-width: 100%;
   margin: 1.5rem 0;
   padding: 1.25rem;
   background: rgba(0, 210, 255, 0.1);
   border-radius: 16px;
   border: 1px solid rgba(0, 210, 255, 0.2);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .bound-badge {
@@ -437,16 +431,28 @@
   font-size: 1.1rem;
 }
 
+.balance-text {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.9rem;
+}
+
 .bound-addresses {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  width: 100%;
+}
+
+.address-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
 }
 
 .address-label {
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.85rem;
-  margin-right: 0.5rem;
 }
 
 .address-value {
@@ -454,7 +460,35 @@
   font-size: 0.85rem;
   word-break: break-all;
   color: rgba(255, 255, 255, 0.9);
+  overflow-wrap: anywhere;
+  width: 100%;
 }
+.balance-card {
+  background: linear-gradient(135deg, rgba(0, 210, 255, 0.15) 0%, rgba(0, 123, 255, 0.15) 100%);
+  border-radius: 16px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid rgba(0, 210, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.balance-label {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.balance-amount {
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  font-feature-settings: 'tnum' on, 'lnum' on;
+}
+
 
 /* Wallet Selector Styles */
 .wallet-options-overlay {
@@ -738,3 +772,257 @@
   color: #8AA4FF;
   text-decoration: underline;
 } 
+.tokenised-strategy-card {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  max-width: 300px;
+  margin: 0 auto;
+  font-family: 'Inter', sans-serif;
+}
+
+.strategy-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.strategy-header h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.strategy-subtitle {
+  font-size: 0.9rem;
+  color: #666;
+  margin: 5px 0 0;
+}
+
+.strategy-details {
+  margin: 20px 0;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+  padding: 15px 0;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.detail-row:last-child {
+  margin-bottom: 0;
+}
+
+.detail-label {
+  font-size: 0.8rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-value {
+  font-size: 0.9rem;
+  color: #333;
+  font-weight: 500;
+}
+
+.strategy-footer {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.full-details-link {
+  color: #0066cc;
+  text-decoration: none;
+  font-size: 0.8rem;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.powered-by {
+  font-size: 0.7rem;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 5px 0 0;
+}
+
+.strategy-connect {
+  width: 100%;
+  margin-top: 20px;
+  background: #0066cc;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.strategy-connect:hover {
+  background: #0052a3;
+}
+
+.strategy-connect .wallet-icon {
+  margin-right: 8px;
+  height: 18px;
+  width: 18px;
+}
+/* Modern Strategy Card */
+.strategy-card-modern {
+  background: #0F0F12;
+  border-radius: 16px;
+  border: 1px solid #2A2A32;
+  padding: 24px;
+  max-width: 340px;
+  margin: 0 auto;
+  font-family: 'Inter', sans-serif;
+  box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.strategy-badge {
+  background: rgba(74, 144, 226, 0.15);
+  color: #4A90E2;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  display: inline-block;
+  margin-bottom: 16px;
+}
+
+.strategy-header-modern {
+  margin-bottom: 20px;
+}
+
+.strategy-icon-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.strategy-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #1E1E24;
+  padding: 4px;
+}
+
+.strategy-ticker {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+.strategy-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #FFFFFF;
+  margin: 8px 0 4px;
+}
+
+.strategy-subtitle-modern {
+  font-size: 0.85rem;
+  color: #A0A0A8;
+  margin: 0;
+}
+
+.strategy-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 20px 0;
+  padding: 16px 0;
+  border-top: 1px solid #2A2A32;
+  border-bottom: 1px solid #2A2A32;
+}
+
+.detail-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-label-modern {
+  font-size: 0.75rem;
+  color: #7A7A85;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.detail-value-modern {
+  font-size: 0.9rem;
+  color: #FFFFFF;
+  font-weight: 500;
+}
+
+.detail-value-modern.success {
+  color: #4CC38A;
+}
+
+.connect-button-modern {
+  width: 100%;
+  margin: 20px 0;
+  background: linear-gradient(90deg, #4A90E2 0%, #6A5ACD 100%);
+  color: white;
+  border: none;
+  padding: 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.connect-button-modern:hover {
+  background: linear-gradient(90deg, #3A80D2 0%, #5A4ABD 100%);
+  transform: translateY(-1px);
+}
+
+.connect-button-modern:active {
+  transform: translateY(0);
+}
+
+.strategy-footer-modern {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.full-details-link-modern {
+  color: #4A90E2;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.2s;
+}
+
+.full-details-link-modern:hover {
+  color: #6A5ACD;
+}
+
+.powered-by-modern {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: #7A7A85;
+}
+
+.liquid-logo {
+  height: 16px;
+}
