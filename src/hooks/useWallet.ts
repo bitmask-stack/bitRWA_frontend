@@ -74,9 +74,8 @@ export const useWallet = (): WalletHookReturn => {
        
         
         const boundAddress = await contract.bitmaskWalletBindings(address)
-        console.log(boundAddress)
-        // setIsBound(boundAddress !== ethers.ZeroAddress)
-        setIsBound(false)
+    
+        setIsBound(boundAddress !== ethers.ZeroAddress)
         
         if (isBound && boundAddress !== ethers.ZeroAddress) {
           const _boundAddress: any = localStorage.getItem("rootstockAddress")

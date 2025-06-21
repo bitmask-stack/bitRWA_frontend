@@ -22,6 +22,7 @@ export const WalletConnect: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [showWalletSelector, setShowWalletSelector] = useState(false);
+  const _boundAddress: any = localStorage.getItem("rootstockAddress")
 
   const handleConnect = async (connectorId?: string) => {
     setIsLoading(true);
@@ -153,7 +154,7 @@ export const WalletConnect: React.FC = () => {
          </div>
          <div className="address-row">
            <span className="address-label">Bitmask RootStock Wallet:</span>
-           <div className="address-value">{bitmaskAddress}</div>
+           <div className="address-value">{_boundAddress}</div>
          </div>
        </div>
      </div>
