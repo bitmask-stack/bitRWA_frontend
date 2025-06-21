@@ -290,7 +290,9 @@ export const WalletConnect: React.FC = () => {
       {!showWalletSelector && (
         <div className="wallet-card">
           <div className="wallet-header">
-            <h2>Connect Your Wallet</h2>
+            
+             {isConnected && isBound ? ( <h2>BitMask Bridge</h2>) : ( <h2>Connect Your Wallet</h2>)}
+           
             <p className="subtitle">
               {isConnected && isBound 
                 ? "Your EVM wallet is successfully bound to your Bitmask address"
