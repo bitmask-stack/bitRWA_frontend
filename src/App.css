@@ -1,0 +1,88 @@
+#root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+.app {
+  min-height: 100vh;
+  height: 100%;
+  background: linear-gradient(135deg, #0e152c 0%, #121a36 100%);
+  width: 100%;
+  overflow: hidden;
+  color: white;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  background: rgba(14, 21, 44, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: white;
+  padding: 1.2rem 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 2rem;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logo {
+  height: 36px;
+  width: auto;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  background: linear-gradient(90deg, #3a7bd5, #00d2ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.network-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.network-dot {
+  width: 8px;
+  height: 8px;
+  background: #00d2ff;
+  border-radius: 50%;
+  box-shadow: 0 0 10px #00d2ff;
+}
+
+main {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1rem 2rem;
+  flex: 1;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
