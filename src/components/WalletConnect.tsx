@@ -163,7 +163,7 @@ export const WalletConnect: React.FC = () => {
       return (
         <button onClick={() => handleConnect()} className="connect-button" disabled={isLoading}>
           {isLoading ? <span className="loading-spinner"></span> : <>
-            <img src="/src/assets/bitmask-rwa-logo.svg" alt="Wallet" className="wallet-icon" />
+            <img src="bitmask-rwa-logo.svg" alt="Wallet" className="wallet-icon" />
             Connect Wallet
           </>}
         </button>
@@ -187,7 +187,7 @@ export const WalletConnect: React.FC = () => {
                     <button key={connector.id} onClick={() => handleConnect(connector.id)}
                       className="wallet-card" disabled={isLoading}>
                       <div className="wallet-card-inner">
-                        <img src={`/src/assets/wallets/${connector.id}.svg`} alt={connector.name} className="wallet-icon" />
+                        <img src={`wallets/${connector.id}.svg`} alt={connector.name} className="wallet-icon" />
                         <span className="wallet-name">{connector.name}</span>
                       </div>
                     </button>
@@ -307,7 +307,7 @@ export const WalletConnect: React.FC = () => {
 
             <div className="strategy-header-modern">
               <div className="strategy-icon-container">
-                <img src="/src/assets/ondo-token-icon.svg" alt="MSTR" className="strategy-icon" />
+                <img src="ondo-token-icon.svg" alt="MSTR" className="strategy-icon" />
                 <span className="strategy-ticker">ONDO</span>
               </div>
               <h3 className="strategy-title">Tokenized US Treasury Bills by ONDO</h3>
@@ -342,7 +342,7 @@ export const WalletConnect: React.FC = () => {
                   <span className="loading-spinner"></span>
                 ) : (
                   <>
-                    <img src="/src/assets/bitcoin-icon.svg" alt="Connect" className="wallet-icon" width="12" height="12" />
+                    <img src="bitcoin-icon.svg" alt="Connect" className="wallet-icon" width="12" height="12" />
                     Bridge to Bitcoin
                   </>
                 )}

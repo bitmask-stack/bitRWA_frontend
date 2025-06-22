@@ -35,7 +35,7 @@ function AppContent() {
       <header className="app-header">
         <div className="header-content">
           <div className="logo-container">
-            <img src="/src/assets/bitmask-rwa-logo.svg" alt="BitRWA" className="logo" />
+            <img src="bitmask-rwa-logo.svg" alt="BitRWA" className="logo" />
             <h1>BitMASK RWA Bridge</h1>
           </div>
           <div className="network-indicator">
