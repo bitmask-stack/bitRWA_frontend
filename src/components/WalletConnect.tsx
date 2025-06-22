@@ -25,13 +25,10 @@ export const WalletConnect: React.FC = () => {
     bindWallet,
     isBinding,
     isBound,
-    walletName,
     availableConnectors,
     fetchBalances,
-    linkedAddressAmount,
     lockAndBridge,
     isLocking,
-    lockError
   } = useWallet();
 
   const [isLoading, setIsLoading] = useState(false);
