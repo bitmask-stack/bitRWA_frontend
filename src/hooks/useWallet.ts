@@ -110,76 +110,6 @@ export const useWallet = (): WalletHookReturn => {
   const [lockError, setLockError] = useState<string | null>(null);
 
   // Enhanced error parsing
-
-  // const lockAndBridge = async (ondoAmount: string) => {
-  //   if (!address || !bitmaskAddress) {
-  //     throw new Error('Wallet not properly connected');
-  //   }
-  
-  //   setIsLocking(true);
-  //   setLockError(null);
-  
-  //   try {
-  //     // 1. Convert amount and validate
-  //     const ondoAmountWei = ethers.parseUnits(ondoAmount, 18);
-  //     if (ondoAmountWei <= 0n) throw new Error('Amount must be > 0');
-  
-  //     // 2. Check balance using ethers.js since we don't have readContract
-
-  //     //@ts-ignore
-  //     const provider = new ethers.BrowserProvider(window.ethereum);
-  //     const ondoContract = new ethers.Contract(
-  //       CONTRACT_CONFIG.TESTNET.ONDO_TOKEN,
-  //       erc20Abi,
-  //       provider
-  //     );
-  
-  //     const balance = await ondoContract.balanceOf(address);
-  //     if (balance < ondoAmountWei) {
-  //       throw new Error(`Insufficient balance. Need ${ondoAmount} ONDO`);
-  //     }
-  
-  //     // 3. Check allowance and approve if needed
-  //     const allowance = await ondoContract.allowance(address, BRIDGE_CONTRACT_ADDRESS);
-  //     if (allowance < ondoAmountWei) {
-  //       await writeContractAsync({
-  //         address: CONTRACT_CONFIG.TESTNET.ONDO_TOKEN as `0x${string}`,
-  //         abi: erc20Abi,
-  //         functionName: 'approve',
-  //         args: [BRIDGE_CONTRACT_ADDRESS, ondoAmountWei]
-  //       });
-  //     }
-  
-  //     // 4. Get required fee using ethers.js
-  //     const bridgeContract = new ethers.Contract(
-  //       BRIDGE_CONTRACT_ADDRESS,
-  //       bitRWABridgeABI,
-  //       provider
-  //     );
-  //     const fee = await bridgeContract.getOndoToEthRatio(ondoAmountWei);
-  
-  //     // 5. Execute bridge transaction using writeContractAsync
-  //     const txHash = await writeContractAsync({
-  //       address: BRIDGE_CONTRACT_ADDRESS as `0x${string}`,
-  //       abi: bitRWABridgeABI,
-  //       functionName: 'lockAndBridge',
-  //       args: [ondoAmountWei],
-  //       value: fee
-  //     });
-  
-  //     console.log('Transaction sent:', txHash);
-  //     return fetchBalances(address, bitmaskAddress);
-  
-  //   } catch (error) {
-  //     console.error('Bridge Error:', error);
-  //     const message = parseError(error);
-  //     setLockError(message);
-  //     throw new Error(message);
-  //   } finally {
-  //     setIsLocking(false);
-  //   }
-  // };
-
   const lockAndBridge = async (ondoAmount: string) => {
     if (!address || !bitmaskAddress) {
       throw new Error('Wallet not properly connected');
@@ -237,7 +167,7 @@ export const useWallet = (): WalletHookReturn => {
         extraArgs: "0x",
         feeToken: ethers.ZeroAddress
       };
-  
+  // @ts-ignore
       const fee = await bridgeContract.ccipRouter.getFee(
         /* destinationChainSelector */ 123, // Replace with actual Rootstock chain selector
         message
