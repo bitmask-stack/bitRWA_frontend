@@ -37,16 +37,16 @@ const NETWORKS = {
     blockExplorerUrls: ['https://explorer.testnet.rsk.co']
   }
 };
-
+//USDY_PROXY: '0x96c94BdA9b4633F6cf7B42E44a1baF97be8b4B46',
 // Contract Addresses
 const CONTRACT_CONFIG = {
   TESTNET: {
     MOCK_USDT: '0xf554F7b66B19A6D28e47d010d5DAf86c9AFa114F',
-    USDY_PROXY: '0x96c94BdA9b4633F6cf7B42E44a1baF97be8b4B46',
-    ONDO_TOKEN: '0xb83989068264628Bdf94b7d0a11C969c8736e46f',
+    USDY_PROXY: '0x717C3087fe043A4C9455142148932b94562D1244', 
+    ONDO_TOKEN: '0xb83989068264628Bdf94b7d0a11C969c8736e46f', //0xb83989068264628Bdf94b7d0a11C969c8736e46f
     RONDO_TOKEN: '0xf3511feB383BEf3164DB72CbC70b3dDA93F119be',
     ONDO_BITRWA_HUB: '0xb83989068264628Bdf94b7d0a11C969c8736e46f',
-    BITRWA_BRIDGE: '0x43ABeDD6C4027cbC31450BCfde78f8c16C6B4d65',
+    BITRWA_BRIDGE: '0x988227FDde38e4C682f31C043A560C5f56fa2448',
     ETH_ONDO_PRICE_FEED: '0x6DCee8BDc08F25950615c1F2850B35350BD3653b',
     RBTC_RONDO_PRICE_FEED: '0x107c0a22B941Fd9A009087387a7e5869bDD2730f',
     ADAPTER_ADDRESS: '0xA2f2D55842E308c1C1017a2c0aB2193d03f037BA',
@@ -54,7 +54,7 @@ const CONTRACT_CONFIG = {
   },
   MAINNET: {} // Add mainnet addresses when ready
 };
-const BRIDGE_CONTRACT_ADDRESS = "0x43ABeDD6C4027cbC31450BCfde78f8c16C6B4d65";
+const BRIDGE_CONTRACT_ADDRESS = "0x988227FDde38e4C682f31C043A560C5f56fa2448";
 
 interface TokenBalance {
   symbol: string;
@@ -110,7 +110,6 @@ export const useWallet = (): WalletHookReturn => {
   const [lockError, setLockError] = useState<string | null>(null);
 
   // Enhanced error parsing
-
   const lockAndBridge = async (ondoAmount: string) => {
     if (!address || !bitmaskAddress) {
       throw new Error('Wallet not properly connected');
@@ -120,12 +119,11 @@ export const useWallet = (): WalletHookReturn => {
     setLockError(null);
   
     try {
-      // 1. Convert amount and validate
+      // 1. Convert amount to wei
       const ondoAmountWei = ethers.parseUnits(ondoAmount, 18);
       if (ondoAmountWei <= 0n) throw new Error('Amount must be > 0');
   
-      // 2. Check balance using ethers.js since we don't have readContract
-
+      // 2. Check balance
       //@ts-ignore
       const provider = new ethers.BrowserProvider(window.ethereum);
       const ondoContract = new ethers.Contract(
@@ -142,33 +140,50 @@ export const useWallet = (): WalletHookReturn => {
       // 3. Check allowance and approve if needed
       const allowance = await ondoContract.allowance(address, BRIDGE_CONTRACT_ADDRESS);
       if (allowance < ondoAmountWei) {
-        await writeContractAsync({
+        const approveTx = await writeContractAsync({
           address: CONTRACT_CONFIG.TESTNET.ONDO_TOKEN as `0x${string}`,
           abi: erc20Abi,
           functionName: 'approve',
           args: [BRIDGE_CONTRACT_ADDRESS, ondoAmountWei]
         });
+        console.log('Approval tx:', approveTx);
       }
   
-      // 4. Get required fee using ethers.js
+      // 4. Get CCIP fee
       const bridgeContract = new ethers.Contract(
         BRIDGE_CONTRACT_ADDRESS,
         bitRWABridgeABI,
         provider
       );
-      const fee = await bridgeContract.getOndoToEthRatio(ondoAmountWei);
   
-      // 5. Execute bridge transaction using writeContractAsync
+      // Create CCIP message (mockup - adjust according to your contract)
+      const message = {
+        receiver: ethers.zeroPadValue(CONTRACT_CONFIG.TESTNET.ADAPTER_ADDRESS, 32),
+        data: ethers.AbiCoder.defaultAbiCoder().encode(
+          ["address", "uint256", "uint256"],
+          [address, ondoAmountWei, 0] // Adjust parameters as needed
+        ),
+        tokenAmounts: [],
+        extraArgs: "0x",
+        feeToken: ethers.ZeroAddress
+      };
+  // @ts-ignore
+      const fee = await bridgeContract.ccipRouter.getFee(
+        /* destinationChainSelector */ 123, // Replace with actual Rootstock chain selector
+        message
+      );
+  
+      // 5. Execute bridge transaction
       const txHash = await writeContractAsync({
         address: BRIDGE_CONTRACT_ADDRESS as `0x${string}`,
         abi: bitRWABridgeABI,
         functionName: 'lockAndBridge',
         args: [ondoAmountWei],
-        value: fee
+        value: fee // Include the CCIP fee
       });
   
-      console.log('Transaction sent:', txHash);
-      return fetchBalances(address, bitmaskAddress);
+      console.log('Bridge transaction sent:', txHash);
+      return txHash;
   
     } catch (error) {
       console.error('Bridge Error:', error);
@@ -285,51 +300,149 @@ export const useWallet = (): WalletHookReturn => {
   };
 
 
+  // const fetchBalances = async (ethAddress: string, rootstockAddress: string): Promise<TokenBalance[]> => {
+  //   const balances: TokenBalance[] = [];
+  
+  //   try {
+  //       //@ts-ignore
+  //     if (!window.ethereum) throw new Error('Ethereum provider not found');
+  //   //@ts-ignore
+  //     const provider = new ethers.BrowserProvider(window.ethereum);
+  //     const config = CONTRACT_CONFIG.TESTNET;
+  
+  //     // 1. Get Ethereum balances (ONDO locked in bridge)
+  //     try {
+  //       const bridgeContract = new ethers.Contract(
+  //         config.BITRWA_BRIDGE,
+  //         [
+  //           'function lockedBalances(address) view returns (uint256)',
+  //           'function bitmaskWalletBindings(address) view returns (address)'
+  //         ],
+  //         provider
+  //       );
+  
+  //       // Get locked ONDO balance
+  //       const lockedBalance = await bridgeContract.lockedBalances(ethAddress);
+  //       balances.push({
+  //         symbol: 'USDY',
+  //         balance: ethers.formatUnits(lockedBalance, 18),
+  //         nativePair: 'USDY/USDT',
+  //         chain: 'Ethereum',
+  //         logo: '/src/assets/ondo-locked-icon.svg',
+  //         type: 'locked'
+  //       });
+        
+  
+  //       // Get bound Rootstock address
+  //       const boundAddress = await bridgeContract.bitmaskWalletBindings(ethAddress);
+  //       if (boundAddress && boundAddress !== ethers.ZeroAddress) {
+  //         rootstockAddress = boundAddress; // Update if found
+  //       }
+  
+  //     } catch (ethError) {
+  //       console.error('Error fetching Ethereum balances:', ethError);
+  //     }
+      
+  
+  //     // 2. Get Rootstock rONDO balance if address exists
+  //     if (rootstockAddress && rootstockAddress !== ethers.ZeroAddress) {
+  //       try {
+  //         const rskProvider = new ethers.JsonRpcProvider(
+  //           NETWORKS.ROOTSTOCK_TESTNET.rpcUrls[0]
+  //         );
+          
+  //         const rOndoContract = new ethers.Contract(
+  //           config.RONDO_TOKEN,
+  //           ['function balanceOf(address) view returns (uint256)'],
+  //           rskProvider
+  //         );
+  
+  //         const rOndoBalance = await rOndoContract.balanceOf(rootstockAddress);
+  //         balances.push({
+  //           symbol: 'rUSDY',
+  //           balance: ethers.formatUnits(rOndoBalance, 18),
+  //           nativePair: 'rUSDY/USDT',
+  //           chain: 'Rootstock',
+  //           logo: '/src/assets/rondo-token-icon.svg',
+  //           type: 'available'
+  //         });
+  //       } catch (rskError) {
+  //         console.error('Error fetching Rootstock balances:', rskError);
+  //       }
+  //     }
+  
+  //     return balances;
+  
+  //   } catch (error) {
+  //     console.error('Error in fetchBalances:', error);
+  //     return []; // Return empty array on critical failure
+  //   }
+  // };
+  
   const fetchBalances = async (ethAddress: string, rootstockAddress: string): Promise<TokenBalance[]> => {
     const balances: TokenBalance[] = [];
-  
+    
     try {
         //@ts-ignore
       if (!window.ethereum) throw new Error('Ethereum provider not found');
-    //@ts-ignore
+      //@ts-ignore
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const config = CONTRACT_CONFIG.TESTNET;
+      const network = await provider.getNetwork();
+      const config = CONTRACT_CONFIG.TESTNET; // Force using testnet config
   
-      // 1. Get Ethereum balances (ONDO locked in bridge)
-      try {
-        const bridgeContract = new ethers.Contract(
-          config.BITRWA_BRIDGE,
-          [
-            'function lockedBalances(address) view returns (uint256)',
-            'function bitmaskWalletBindings(address) view returns (address)'
-          ],
-          provider
-        );
+      // Verify we're on Sepolia testnet (chainId 11155111)
+      if (Number(network.chainId) !== 11155111) {
+        console.warn('Not on Sepolia testnet - skipping Ethereum balances');
+        // You might want to add logic here to prompt user to switch networks
+      } else {
+        // 1. Get Ethereum Sepolia testnet balances
+        try {
+          // USDY Available Balance
+          const usdyContract = new ethers.Contract(
+            config.USDY_PROXY, // 0x96c94BdA9b4633F6cf7B42E44a1baF97be8b4B46 on Sepolia
+            erc20Abi,
+            provider
+          );
+          const usdyBalance = await usdyContract.balanceOf(ethAddress);
+          balances.push({
+            symbol: 'USDY',
+            balance: ethers.formatUnits(usdyBalance, 18),
+            nativePair: 'USDY/USDT',
+            chain: 'Ethereum',
+            logo: '/src/assets/ondo-token-icon.svg',
+            type: 'available',
+            originalSymbol: 'USDY'
+          });
   
-        // Get locked ONDO balance
-        const lockedBalance = await bridgeContract.lockedBalances(ethAddress);
-        balances.push({
-          symbol: 'USDY',
-          balance: ethers.formatUnits(lockedBalance, 18),
-          nativePair: 'USDY/USDT',
-          chain: 'Ethereum',
-          logo: '/src/assets/ondo-locked-icon.svg',
-          type: 'locked'
-        });
-        
+          // Locked ONDO Balance (in bridge)
+          const bridgeContract = new ethers.Contract(
+            config.BITRWA_BRIDGE, // 0x43ABeDD6C4027cbC31450BCfde78f8c16C6B4d65 on Sepolia
+            bitRWABridgeABI,
+            provider
+          );
+          const lockedBalance = await bridgeContract.lockedBalances(ethAddress);
+          balances.push({
+            symbol: 'USDY',
+            balance: ethers.formatUnits(lockedBalance, 18),
+            nativePair: 'USDY/USDT',
+            chain: 'Ethereum',
+            logo: '/src/assets/ondo-locked-icon.svg',
+            type: 'locked',
+            originalSymbol: 'ONDO'
+          });
   
-        // Get bound Rootstock address
-        const boundAddress = await bridgeContract.bitmaskWalletBindings(ethAddress);
-        if (boundAddress && boundAddress !== ethers.ZeroAddress) {
-          rootstockAddress = boundAddress; // Update if found
+          // Get bound Rootstock address
+          const boundAddress = await bridgeContract.bitmaskWalletBindings(ethAddress);
+          if (boundAddress && boundAddress !== ethers.ZeroAddress) {
+            rootstockAddress = boundAddress; // Update if found
+          }
+  
+        } catch (ethError) {
+          console.error('Error fetching Ethereum Sepolia balances:', ethError);
         }
-  
-      } catch (ethError) {
-        console.error('Error fetching Ethereum balances:', ethError);
       }
-      
   
-      // 2. Get Rootstock rONDO balance if address exists
+      // 2. Get Rootstock testnet rUSDY balance if address exists
       if (rootstockAddress && rootstockAddress !== ethers.ZeroAddress) {
         try {
           const rskProvider = new ethers.JsonRpcProvider(
@@ -337,8 +450,8 @@ export const useWallet = (): WalletHookReturn => {
           );
           
           const rOndoContract = new ethers.Contract(
-            config.RONDO_TOKEN,
-            ['function balanceOf(address) view returns (uint256)'],
+            config.RONDO_TOKEN, // 0xf3511feB383BEf3164DB72CbC70b3dDA93F119be on RSK Testnet
+            erc20Abi,
             rskProvider
           );
   
@@ -349,10 +462,11 @@ export const useWallet = (): WalletHookReturn => {
             nativePair: 'rUSDY/USDT',
             chain: 'Rootstock',
             logo: '/src/assets/rondo-token-icon.svg',
-            type: 'available'
+            type: 'available',
+            originalSymbol: 'rONDO'
           });
         } catch (rskError) {
-          console.error('Error fetching Rootstock balances:', rskError);
+          console.error('Error fetching Rootstock Testnet balances:', rskError);
         }
       }
   
