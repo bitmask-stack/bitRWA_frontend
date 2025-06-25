@@ -144,6 +144,7 @@ export const WalletConnect: React.FC = () => {
     if (!lockAmount || !bitmaskAddress) return;
     try {
       const rootstockAddress = localStorage.getItem("rootstockAddress") || bitmaskAddress;
+      console.log({lockAmount})
    
       await lockAndBridge(lockAmount);
       setLockAmount('');
