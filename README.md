@@ -5,6 +5,7 @@
 | $ | **Multi - compliant RWAs** | USDY, OUSG |
 | --- | --- | --- |
 | **⛓️** | **Multi- chain deployment** | Ethereum, Avalanche|
+
 **Brridged to Bitcoin via Rootstock**
 
 # bitRWA-Bridge Smart Contracts
