@@ -1,10 +1,28 @@
-import { useAccount, useConnect, useDisconnect, Connector } from 'wagmi'
-import { useState, useEffect } from 'react'
+import { 
+  useAccount, 
+  useConnect, 
+  useDisconnect, 
+  Connector, 
+  useWriteContract
+} from 'wagmi'
+import { useState, useEffect, useCallback } from 'react'
 import { ethers } from 'ethers'
-import { useWriteContract } from 'wagmi'
 import { bitRWABridgeABI } from '../abis/bitRWABridgeABI'
 
-import { erc20Abi } from 'viem'
+// ERC20 ABI with approve function
+const erc20Abi = [
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function totalSupply() view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function transferFrom(address from, address to, uint256 amount) returns (bool)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+  "event Approval(address indexed owner, address indexed spender, uint256 value)"
+];
 
 // Network Configuration
 const NETWORKS = {
@@ -37,24 +55,23 @@ const NETWORKS = {
     blockExplorerUrls: ['https://explorer.testnet.rsk.co']
   }
 };
-//USDY_PROXY: '0x96c94BdA9b4633F6cf7B42E44a1baF97be8b4B46',
+
 // Contract Addresses
-const CONTRACT_CONFIG = {
+export const CONTRACT_CONFIG = {
   TESTNET: {
     MOCK_USDT: '0xf554F7b66B19A6D28e47d010d5DAf86c9AFa114F',
     USDY_PROXY: '0x717C3087fe043A4C9455142148932b94562D1244', 
-    ONDO_TOKEN: '0xb83989068264628Bdf94b7d0a11C969c8736e46f', //0xb83989068264628Bdf94b7d0a11C969c8736e46f
-    RONDO_TOKEN: '0xf3511feB383BEf3164DB72CbC70b3dDA93F119be',
-    ONDO_BITRWA_HUB: '0xb83989068264628Bdf94b7d0a11C969c8736e46f',
-    BITRWA_BRIDGE: '0x988227FDde38e4C682f31C043A560C5f56fa2448',
-    ETH_ONDO_PRICE_FEED: '0x6DCee8BDc08F25950615c1F2850B35350BD3653b',
-    RBTC_RONDO_PRICE_FEED: '0x107c0a22B941Fd9A009087387a7e5869bDD2730f',
-    ADAPTER_ADDRESS: '0xA2f2D55842E308c1C1017a2c0aB2193d03f037BA',
-   
+    ONDO_TOKEN: '0x717C3087fe043A4C9455142148932b94562D1244',
+    RONDO_TOKEN: '0x936A3dC8f7d72B2edd4EE232500Ec9d873cd2416',
+    BITRWA_BRIDGE: '0x00C25653a7b8bEf78F766c0Cbdc62580702e7838',
+    ETH_ONDO_PRICE_FEED: '0x94Fb4C1F6AD11B17cca8036d623B37b6e526CD21',
+    RBTC_RONDO_PRICE_FEED: '0x06D64035403457dd0d68ed0b8ff3F6EF498C97a5',
+    ADAPTER_ADDRESS: '0x9D8fC47522d904fb31F75EFD175dFcEc6F33fb4c',
+    CCIP_ROUTER: '0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59',
+    ROOTSTOCK_CHAIN_SELECTOR: 8953668971247136127
   },
-  MAINNET: {} // Add mainnet addresses when ready
+  MAINNET: {}
 };
-const BRIDGE_CONTRACT_ADDRESS = "0x988227FDde38e4C682f31C043A560C5f56fa2448";
 
 interface TokenBalance {
   symbol: string;
@@ -66,164 +83,264 @@ interface TokenBalance {
   originalSymbol?: string;
 }
 
-type WalletHookReturn = {
-  address: `0x${string}` | undefined
-  isConnected: boolean
-  bitmaskAddress: string
-  error: string
-  connectWallet: (connectorId?: string) => Promise<void>
-  disconnectWallet: () => void
-  validateBitmaskAddress: (address: string) => boolean
-  setBitmaskAddress: (address: string) => void
-  bindWallet: () => Promise<void>
-  isBinding: boolean
-  isBound: boolean
-  walletName: string
-  isInjectedWallet: boolean
-  availableConnectors: Connector[]
-  linkedAddressAmount: string // Changed to match component expectation
-  fetchBalances: (ethAddress: string, rootstockAddress: string) => Promise<TokenBalance[]>
-  currentChainId: string | null
-  currentNetwork: string | null
-  testContracts: () => Promise<void>
-  switchNetwork: (chainId: number) => Promise<boolean>
-  lockAndBridge: (ondoAmount: string) => Promise<any>;
+interface WalletHookReturn {
+  address: `0x${string}` | undefined;
+  isConnected: boolean;
+  bitmaskAddress: string;
+  error: string;
+  connectWallet: (connectorId?: string) => Promise<void>;
+  disconnectWallet: () => void;
+  validateBitmaskAddress: (address: string) => boolean;
+  setBitmaskAddress: (address: string) => void;
+  bindWallet: () => Promise<void>;
+  isBinding: boolean;
+  isBound: boolean;
+  walletName: string;
+  isInjectedWallet: boolean;
+  availableConnectors: Connector[];
+  linkedAddressAmount: string;
+  fetchBalances: (ethAddress: string, rootstockAddress: string) => Promise<TokenBalance[]>;
+  currentChainId: string | null;
+  currentNetwork: string | null;
+  testContracts: () => Promise<void>;
+  switchNetwork: (chainId: number) => Promise<boolean>;
+  lockAndBridge: (ondoAmount: string, ondoTokenHolderAddress?: string) => Promise<string>;
   isLocking: boolean;
   lockError: string | null;
+  approveOndoForBridge: (amount: string, tokenHolderAddress?: string) => Promise<string>;
+  checkBridgeStatus: (amount: string, tokenHolderAddress?: string) => Promise<{ canBridge: boolean; reason: string; fee?: string }>;
 }
 
+
 export const useWallet = (): WalletHookReturn => {
-  const { address, isConnected, connector: activeConnector } = useAccount()
-  const { connect, connectors } = useConnect()
-  const { disconnect } = useDisconnect()
-  const { writeContractAsync } = useWriteContract()
-  const [bitmaskAddress, setBitmaskAddress] = useState<string>('')
-  const [error, setError] = useState<string>('')
-  const [isInjectedWallet, setIsInjectedWallet] = useState<boolean>(false)
-  const [isBinding, setIsBinding] = useState<boolean>(false)
-  const [isBound, setIsBound] = useState<boolean>(false)
-  const [availableConnectors, setAvailableConnectors] = useState<Connector[]>([])
-  const [linkedAddressAmount, setLinkedAddressAmount] = useState<string>('0') // Changed name to match
-  const [currentChainId, setCurrentChainId] = useState<string | null>(null)
-  const [currentNetwork, setCurrentNetwork] = useState<string | null>(null)
+  const { address, isConnected, connector: activeConnector } = useAccount();
+  const { connect, connectors } = useConnect();
+  const { disconnect } = useDisconnect();
+  const { writeContractAsync } = useWriteContract();
+  
+  const [bitmaskAddress, setBitmaskAddress] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [isInjectedWallet, setIsInjectedWallet] = useState<boolean>(false);
+  const [isBinding, setIsBinding] = useState<boolean>(false);
+  const [isBound, setIsBound] = useState<boolean>(false);
+  const [availableConnectors, setAvailableConnectors] = useState<Connector[]>([]);
+  const [linkedAddressAmount, setLinkedAddressAmount] = useState<string>('0');
+  const [currentChainId, setCurrentChainId] = useState<string | null>(null);
+  const [currentNetwork, setCurrentNetwork] = useState<string | null>(null);
   const [isLocking, setIsLocking] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
 
-  // Enhanced error parsing
-  const lockAndBridge = async (ondoAmount: string) => {
-    if (!address || !bitmaskAddress) {
-      throw new Error('Wallet not properly connected');
-    }
-  
+  const lockAndBridge = useCallback(async (ondoAmount: string, ondoTokenHolderAddress?: string): Promise<string> => {
     setIsLocking(true);
     setLockError(null);
-  
+    
     try {
-      // 1. Convert amount to wei
-      const ondoAmountWei = ethers.parseUnits(ondoAmount, 18);
-      if (ondoAmountWei <= 0n) throw new Error('Amount must be > 0');
-  
-      // 2. Check balance
-      //@ts-ignore
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const ondoContract = new ethers.Contract(
+        // 1. Basic validations
+        if (!address) throw new Error('Please connect your wallet');
+        if (!CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE) throw new Error('Bridge configuration error');
+
+        // 2. Convert amount
+        const ondoAmountWei = ethers.parseUnits(ondoAmount, 18);
+        
+        // 3. Check wallet binding
+        const boundWallet = bitmaskAddress || localStorage.getItem("rootstockAddress");
+        if (!boundWallet) throw new Error('Please bind your Rootstock wallet first');
+
+        // 4. Get token holder address
+        const tokenHolder = ondoTokenHolderAddress || address;
+        if (!ethers.isAddress(tokenHolder)) throw new Error('Invalid wallet address');
+
+        // 5. Check allowance and request approval if needed
+        const provider = new ethers.BrowserProvider((window as any).ethereum);
+        const ondoToken = new ethers.Contract(
+            CONTRACT_CONFIG.TESTNET.ONDO_TOKEN,
+            erc20Abi,
+            provider
+        );
+        
+        console.log('🔍 Checking token allowance...');
+        const allowance = await ondoToken.allowance(tokenHolder, CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE);
+        console.log('Current allowance:', ethers.formatUnits(allowance, 18), 'USDY');
+        console.log('Required amount:', ondoAmount, 'USDY');
+        
+        if (allowance < ondoAmountWei) {
+            console.log('Insufficient allowance, requesting approval...');
+            console.log('Current allowance:', ethers.formatUnits(allowance, 18), 'USDY');
+            console.log('Required amount:', ethers.formatUnits(ondoAmountWei, 18), 'USDY');
+            
+            // Instead of handling approval automatically, throw an error to let the frontend handle it
+            throw new Error('INSUFFICIENT_ALLOWANCE');
+        }
+
+        // 6. Use the new canBridge function to check all preconditions
+        const bridgeContract = new ethers.Contract(
+            CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE,
+            bitRWABridgeABI,
+            provider
+        );
+
+        console.log('🔍 Checking bridge preconditions...');
+        const [canBridge, reason] = await bridgeContract.canBridge(address, tokenHolder, ondoAmountWei);
+        
+        if (!canBridge) {
+            throw new Error(`Cannot bridge: ${reason}`);
+        }
+
+        console.log('✅ All preconditions met');
+
+        // 7. Get required fee using the new getRequiredFee function
+        let requiredFee: bigint;
+        try {
+            console.log('💰 Calculating required fee...');
+            requiredFee = await bridgeContract.getRequiredFee(ondoAmountWei);
+            console.log('Required fee:', ethers.formatEther(requiredFee), 'ETH');
+        } catch (feeError) {
+            console.warn('Could not get dynamic fee, using fallback:', feeError);
+            requiredFee = ethers.parseEther('0.1'); // Fallback fee
+        }
+        
+        // 8. Check ETH balance for fee
+        const ethBalance = await provider.getBalance(address);
+        if (ethBalance < requiredFee) {
+            throw new Error(`Insufficient ETH for fee. Required: ${ethers.formatEther(requiredFee)} ETH, Available: ${ethers.formatEther(ethBalance)} ETH`);
+        }
+
+        // 9. Send transaction
+        const signer = await provider.getSigner();
+        const bridgeContractWithSigner = new ethers.Contract(
+            CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE,
+            bitRWABridgeABI,
+            signer
+        );
+
+        console.log('🌉 Sending bridge transaction...');
+        const tx = await bridgeContractWithSigner.lockAndBridge(
+            ondoAmountWei,
+            tokenHolder,
+            {
+                value: requiredFee,
+                gasLimit: 500000
+            }
+        );
+
+        console.log('📝 Transaction sent:', tx.hash);
+        return tx.hash;
+
+    } catch (error: any) {
+        console.error('Transaction error:', error);
+        let userMessage = error.message;
+        
+        // Enhanced error decoding for custom errors
+        if (error?.data) {
+            try {
+                const iface = new ethers.Interface(bitRWABridgeABI);
+                const decodedError = iface.parseError(error.data);
+                
+                switch (decodedError?.name) {
+                    case 'NotCompliant':
+                        userMessage = 'Your wallet is not compliant. Please contact support.';
+                        break;
+                    case 'WalletNotBound':
+                        userMessage = 'Your wallet is not bound to a Bitmask wallet. Please bind your wallet first.';
+                        break;
+                    case 'InsufficientTokenBalance':
+                        const [available, required] = decodedError?.args;
+                        userMessage = `Insufficient balance: ${ethers.formatUnits(available, 18)} available, ${ethers.formatUnits(required, 18)} required`;
+                        break;
+                    case 'InsufficientTokenAllowance':
+                        const [allowance, requiredAllowance] = decodedError?.args;
+                        userMessage = `Insufficient allowance: ${ethers.formatUnits(allowance, 18)} approved, ${ethers.formatUnits(requiredAllowance, 18)} required`;
+                        break;
+                    case 'InsufficientFee':
+                        const [sent, requiredFee] = decodedError?.args;
+                        userMessage = `Insufficient fee: ${ethers.formatEther(sent)} ETH sent, ${ethers.formatEther(requiredFee)} ETH required`;
+                        break;
+                    case 'ZeroAmount':
+                        userMessage = 'Amount must be greater than 0';
+                        break;
+                    case 'InvalidTokenHolder':
+                        userMessage = 'Invalid token holder address';
+                        break;
+                    default:
+                        userMessage = `Contract error: ${decodedError?.name}`;
+                }
+            } catch (decodeError) {
+                console.error('Error decoding custom error:', decodeError);
+                // Handle standard revert strings
+                if (error.data.startsWith('0x08c379a0')) {
+                    try {
+                        const reason = ethers.AbiCoder.defaultAbiCoder().decode(
+                            ['string'],
+                            '0x' + error.data.slice(10)
+                        )[0];
+                        userMessage = reason;
+                    } catch (e) {
+                        userMessage = 'Contract execution reverted';
+                    }
+                }
+            }
+        } 
+        // Handle user rejection
+        else if (error.code === 4001) {
+            userMessage = 'Transaction rejected by user';
+        }
+
+        setLockError(userMessage);
+        throw new Error(userMessage);
+    } finally {
+        setIsLocking(false);
+    }
+}, [address, bitmaskAddress]);
+
+
+  const approveOndoForBridge = useCallback(async (amount: string, tokenHolderAddress?: string): Promise<string> => {
+    try {
+      const holderAddress = tokenHolderAddress || address;
+      if (!holderAddress) throw new Error('No token holder address available');
+
+      const ondoAmountWei = ethers.parseUnits(amount, 18);
+      
+      // Use direct ethers.js call to ensure MetaMask prompt appears
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      
+      const ondoToken = new ethers.Contract(
         CONTRACT_CONFIG.TESTNET.ONDO_TOKEN,
         erc20Abi,
-        provider
+        signer
       );
-  
-      const balance = await ondoContract.balanceOf(address);
-      if (balance < ondoAmountWei) {
-        throw new Error(`Insufficient balance. Need ${ondoAmount} ONDO`);
+      
+      console.log('📝 Sending approval transaction...');
+      console.log('Token address:', CONTRACT_CONFIG.TESTNET.ONDO_TOKEN);
+      console.log('Spender address:', CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE);
+      console.log('Amount to approve:', ethers.formatUnits(ondoAmountWei, 18), 'USDY');
+      
+      const approveTx = await ondoToken.approve(
+        CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE,
+        ondoAmountWei
+      );
+      
+      console.log('Approval transaction sent:', approveTx.hash);
+      return approveTx.hash;
+    } catch (error: any) {
+      console.error('Approval error:', error);
+      
+      // Handle user rejection
+      if (error.code === 4001) {
+        throw new Error('Approval was rejected by user');
       }
-  
-      // 3. Check allowance and approve if needed
-      const allowance = await ondoContract.allowance(address, BRIDGE_CONTRACT_ADDRESS);
-      if (allowance < ondoAmountWei) {
-        const approveTx = await writeContractAsync({
-          address: CONTRACT_CONFIG.TESTNET.ONDO_TOKEN as `0x${string}`,
-          abi: erc20Abi,
-          functionName: 'approve',
-          args: [BRIDGE_CONTRACT_ADDRESS, ondoAmountWei]
-        });
-        console.log('Approval tx:', approveTx);
-      }
-  
-      // 4. Get CCIP fee
-      const bridgeContract = new ethers.Contract(
-        BRIDGE_CONTRACT_ADDRESS,
-        bitRWABridgeABI,
-        provider
-      );
-  
-      // Create CCIP message (mockup - adjust according to your contract)
-      const message = {
-        receiver: ethers.zeroPadValue(CONTRACT_CONFIG.TESTNET.ADAPTER_ADDRESS, 32),
-        data: ethers.AbiCoder.defaultAbiCoder().encode(
-          ["address", "uint256", "uint256"],
-          [address, ondoAmountWei, 0] // Adjust parameters as needed
-        ),
-        tokenAmounts: [],
-        extraArgs: "0x",
-        feeToken: ethers.ZeroAddress
-      };
-  // @ts-ignore
-      const fee = await bridgeContract.ccipRouter.getFee(
-        /* destinationChainSelector */ 123, // Replace with actual Rootstock chain selector
-        message
-      );
-  
-      // 5. Execute bridge transaction
-      const txHash = await writeContractAsync({
-        address: BRIDGE_CONTRACT_ADDRESS as `0x${string}`,
-        abi: bitRWABridgeABI,
-        functionName: 'lockAndBridge',
-        args: [ondoAmountWei],
-        value: fee // Include the CCIP fee
-      });
-  
-      console.log('Bridge transaction sent:', txHash);
-      return txHash;
-  
-    } catch (error) {
-      console.error('Bridge Error:', error);
-      const message = parseError(error);
-      setLockError(message);
-      throw new Error(message);
-    } finally {
-      setIsLocking(false);
+      
+      throw new Error(`Failed to approve USDY tokens: ${error.message}`);
     }
-  };
-  const parseError = (error: any): string => {
-  // Handle MetaMask user rejection
-  if (error?.code === 4001) return 'User denied transaction';
-  
-  // Parse contract revert reasons
-  if (error?.data) {
-    try {
-      if (error.data.startsWith('0x08c379a0')) {
-        return ethers.AbiCoder.defaultAbiCoder().decode(
-          ['string'], 
-          `0x${error.data.slice(10)}`
-        )[0];
-      }
-    } catch (e) {
-      console.warn('Error parsing revert reason:', e);
-    }
-  }
-  
-  return error.message || 'Transaction failed';
-};
-  
+  }, [address]);
+
+
 
   const switchNetwork = async (targetChainId: number): Promise<boolean> => {
     try {
-        //@ts-ignore
-      if (!window.ethereum) {
-        throw new Error('No Ethereum provider found');
-      }
-  //@ts-ignore
-      await window.ethereum.request({
+      if (!(window as any).ethereum) throw new Error('No Ethereum provider');
+      
+      await (window as any).ethereum.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: `0x${targetChainId.toString(16)}` }],
       });
@@ -233,34 +350,23 @@ export const useWallet = (): WalletHookReturn => {
         try {
           let params;
           switch (targetChainId) {
-            case 1:
-              params = NETWORKS.ETHEREUM_MAINNET;
-              break;
-            case 11155111:
-              params = NETWORKS.ETHEREUM_SEPOLIA;
-              break;
-            case 30:
-              params = NETWORKS.ROOTSTOCK_MAINNET;
-              break;
-            case 31:
-              params = NETWORKS.ROOTSTOCK_TESTNET;
-              break;
-            default:
-              throw new Error('Unsupported network');
+            case 1: params = NETWORKS.ETHEREUM_MAINNET; break;
+            case 11155111: params = NETWORKS.ETHEREUM_SEPOLIA; break;
+            case 30: params = NETWORKS.ROOTSTOCK_MAINNET; break;
+            case 31: params = NETWORKS.ROOTSTOCK_TESTNET; break;
+            default: throw new Error('Unsupported network');
           }
-  //@ts-ignore
-          await window.ethereum.request({
+          
+          await (window as any).ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [params],
           });
           return true;
         } catch (addError) {
-          console.error('Error adding network:', addError);
           setError('Failed to add network');
           return false;
         }
       }
-      console.error('Error switching network:', switchError);
       setError('Failed to switch network');
       return false;
     }
@@ -268,138 +374,41 @@ export const useWallet = (): WalletHookReturn => {
 
   const verifyNetwork = async (): Promise<boolean> => {
     try {
-        //@ts-ignore
-      if (!window.ethereum) {
-        console.warn('No injected provider found');
-        return false;
-      }
-  //@ts-ignore
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      if (!(window as any).ethereum) return false;
+      
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
       const network = await provider.getNetwork();
       const hexChainId = `0x${network.chainId.toString(16)}`;
       
       setCurrentChainId(hexChainId);
-      
       setCurrentNetwork(
-          //@ts-ignore
-        network.chainId === 1 ? 'Ethereum Mainnet' :
-          //@ts-ignore
-        network.chainId === 11155111 ? 'Ethereum Sepolia' :
-          //@ts-ignore
-        network.chainId === 30 ? 'Rootstock Mainnet' :
-          //@ts-ignore
-        network.chainId === 31 ? 'Rootstock Testnet' :
+        network.chainId === 1n ? 'Ethereum Mainnet' :
+        network.chainId === 11155111n ? 'Ethereum Sepolia' :
+        network.chainId === 30n ? 'Rootstock Mainnet' :
+        network.chainId === 31n ? 'Rootstock Testnet' :
         `Unknown Network (${network.chainId})`
       );
 
       return [1, 11155111, 30, 31].includes(Number(network.chainId));
     } catch (err) {
-      console.error('Network verification failed:', err);
       return false;
     }
   };
 
-
-  // const fetchBalances = async (ethAddress: string, rootstockAddress: string): Promise<TokenBalance[]> => {
-  //   const balances: TokenBalance[] = [];
-  
-  //   try {
-  //       //@ts-ignore
-  //     if (!window.ethereum) throw new Error('Ethereum provider not found');
-  //   //@ts-ignore
-  //     const provider = new ethers.BrowserProvider(window.ethereum);
-  //     const config = CONTRACT_CONFIG.TESTNET;
-  
-  //     // 1. Get Ethereum balances (ONDO locked in bridge)
-  //     try {
-  //       const bridgeContract = new ethers.Contract(
-  //         config.BITRWA_BRIDGE,
-  //         [
-  //           'function lockedBalances(address) view returns (uint256)',
-  //           'function bitmaskWalletBindings(address) view returns (address)'
-  //         ],
-  //         provider
-  //       );
-  
-  //       // Get locked ONDO balance
-  //       const lockedBalance = await bridgeContract.lockedBalances(ethAddress);
-  //       balances.push({
-  //         symbol: 'USDY',
-  //         balance: ethers.formatUnits(lockedBalance, 18),
-  //         nativePair: 'USDY/USDT',
-  //         chain: 'Ethereum',
-  //         logo: '/src/assets/ondo-locked-icon.svg',
-  //         type: 'locked'
-  //       });
-        
-  
-  //       // Get bound Rootstock address
-  //       const boundAddress = await bridgeContract.bitmaskWalletBindings(ethAddress);
-  //       if (boundAddress && boundAddress !== ethers.ZeroAddress) {
-  //         rootstockAddress = boundAddress; // Update if found
-  //       }
-  
-  //     } catch (ethError) {
-  //       console.error('Error fetching Ethereum balances:', ethError);
-  //     }
-      
-  
-  //     // 2. Get Rootstock rONDO balance if address exists
-  //     if (rootstockAddress && rootstockAddress !== ethers.ZeroAddress) {
-  //       try {
-  //         const rskProvider = new ethers.JsonRpcProvider(
-  //           NETWORKS.ROOTSTOCK_TESTNET.rpcUrls[0]
-  //         );
-          
-  //         const rOndoContract = new ethers.Contract(
-  //           config.RONDO_TOKEN,
-  //           ['function balanceOf(address) view returns (uint256)'],
-  //           rskProvider
-  //         );
-  
-  //         const rOndoBalance = await rOndoContract.balanceOf(rootstockAddress);
-  //         balances.push({
-  //           symbol: 'rUSDY',
-  //           balance: ethers.formatUnits(rOndoBalance, 18),
-  //           nativePair: 'rUSDY/USDT',
-  //           chain: 'Rootstock',
-  //           logo: '/src/assets/rondo-token-icon.svg',
-  //           type: 'available'
-  //         });
-  //       } catch (rskError) {
-  //         console.error('Error fetching Rootstock balances:', rskError);
-  //       }
-  //     }
-  
-  //     return balances;
-  
-  //   } catch (error) {
-  //     console.error('Error in fetchBalances:', error);
-  //     return []; // Return empty array on critical failure
-  //   }
-  // };
-  
   const fetchBalances = async (ethAddress: string, rootstockAddress: string): Promise<TokenBalance[]> => {
     const balances: TokenBalance[] = [];
     
     try {
-        //@ts-ignore
-      if (!window.ethereum) throw new Error('Ethereum provider not found');
-      //@ts-ignore
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      if (!(window as any).ethereum) throw new Error('Ethereum provider not found');
+      
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
       const network = await provider.getNetwork();
-      const config = CONTRACT_CONFIG.TESTNET; // Force using testnet config
-  
-      // Verify we're on Sepolia testnet (chainId 11155111)
-      if (Number(network.chainId) !== 11155111) {
-        console.warn('Not on Sepolia testnet - skipping Ethereum balances');
-        // You might want to add logic here to prompt user to switch networks
-      } else {
-        // 1. Get Ethereum Sepolia testnet balances
+      const config = CONTRACT_CONFIG.TESTNET;
+
+      if (Number(network.chainId) === 11155111) {
         try {
-          // USDY Available Balance
           const usdyContract = new ethers.Contract(
-            config.USDY_PROXY, // 0x96c94BdA9b4633F6cf7B42E44a1baF97be8b4B46 on Sepolia
+            config.USDY_PROXY,
             erc20Abi,
             provider
           );
@@ -413,36 +422,11 @@ export const useWallet = (): WalletHookReturn => {
             type: 'available',
             originalSymbol: 'USDY'
           });
-  
-          // Locked ONDO Balance (in bridge)
-          const bridgeContract = new ethers.Contract(
-            config.BITRWA_BRIDGE, // 0x43ABeDD6C4027cbC31450BCfde78f8c16C6B4d65 on Sepolia
-            bitRWABridgeABI,
-            provider
-          );
-          const lockedBalance = await bridgeContract.lockedBalances(ethAddress);
-          balances.push({
-            symbol: 'USDY',
-            balance: ethers.formatUnits(lockedBalance, 18),
-            nativePair: 'USDY/USDT',
-            chain: 'Ethereum',
-            logo: '/src/assets/ondo-locked-icon.svg',
-            type: 'locked',
-            originalSymbol: 'ONDO'
-          });
-  
-          // Get bound Rootstock address
-          const boundAddress = await bridgeContract.bitmaskWalletBindings(ethAddress);
-          if (boundAddress && boundAddress !== ethers.ZeroAddress) {
-            rootstockAddress = boundAddress; // Update if found
-          }
-  
         } catch (ethError) {
-          console.error('Error fetching Ethereum Sepolia balances:', ethError);
+          console.error('Error fetching Ethereum balances:', ethError);
         }
       }
-  
-      // 2. Get Rootstock testnet rUSDY balance if address exists
+
       if (rootstockAddress && rootstockAddress !== ethers.ZeroAddress) {
         try {
           const rskProvider = new ethers.JsonRpcProvider(
@@ -450,7 +434,7 @@ export const useWallet = (): WalletHookReturn => {
           );
           
           const rOndoContract = new ethers.Contract(
-            config.RONDO_TOKEN, // 0xf3511feB383BEf3164DB72CbC70b3dDA93F119be on RSK Testnet
+            config.RONDO_TOKEN,
             erc20Abi,
             rskProvider
           );
@@ -466,21 +450,19 @@ export const useWallet = (): WalletHookReturn => {
             originalSymbol: 'rONDO'
           });
         } catch (rskError) {
-          console.error('Error fetching Rootstock Testnet balances:', rskError);
+          console.error('Error fetching Rootstock balances:', rskError);
         }
       }
   
       return balances;
-  
     } catch (error) {
-      console.error('Error in fetchBalances:', error);
-      return []; // Return empty array on critical failure
+      return [];
     }
   };
+
   useEffect(() => {
     const checkInjectedWallet = async () => {
-        //@ts-ignore
-      const hasInjected = Boolean(window.ethereum);
+      const hasInjected = Boolean((window as any).ethereum);
       setIsInjectedWallet(hasInjected);
       
       const filteredConnectors = connectors.filter(connector => {
@@ -493,54 +475,44 @@ export const useWallet = (): WalletHookReturn => {
       if (hasInjected) {
         try {
           await verifyNetwork();
-        } catch (err) {
-          console.error('Network verification error:', err);
-        }
+        } catch (err) {}
       }
     };
-    
+
     checkInjectedWallet();
-    const interval = setInterval(checkInjectedWallet, 1000);
-    return () => clearInterval(interval);
   }, [connectors]);
 
   useEffect(() => {
     const checkBoundStatus = async () => {
-      if (!address) return;
+      if (!address || !(window as any).ethereum) return;
       
       try {
-          //@ts-ignore
-        if (!window.ethereum) {
-          console.warn('No ethereum provider for bound status check');
-          return;
-        }
-  //@ts-ignore
-        const provider = new ethers.BrowserProvider(window.ethereum);
+        const provider = new ethers.BrowserProvider((window as any).ethereum);
         const contract = new ethers.Contract(
           CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE,
           bitRWABridgeABI,
           provider
         );
        
-        const boundAddress = await contract.bitmaskWalletBindings(address);
-        const isCurrentlyBound = boundAddress !== ethers.ZeroAddress;
+        // Check what Rootstock address is bound to the current Ethereum user
+        const boundRootstockAddress = await contract.bitmaskWalletBindings(address);
+        
+        const isCurrentlyBound = boundRootstockAddress !== ethers.ZeroAddress;
         setIsBound(isCurrentlyBound);
         
-        if (isCurrentlyBound && boundAddress !== ethers.ZeroAddress) {
-          // Use the bound address from contract, not localStorage
-          setBitmaskAddress(boundAddress);
-          localStorage.setItem("rootstockAddress", boundAddress);
+        if (isCurrentlyBound && boundRootstockAddress !== ethers.ZeroAddress) {
+          // The bound address is the Rootstock address
+          setBitmaskAddress(boundRootstockAddress);
+          localStorage.setItem("rootstockAddress", boundRootstockAddress);
           
           try {
             const rskProvider = new ethers.JsonRpcProvider(NETWORKS.ROOTSTOCK_TESTNET.rpcUrls[0]);
-            const balance = await rskProvider.getBalance(boundAddress);
+            const balance = await rskProvider.getBalance(boundRootstockAddress);
             setLinkedAddressAmount(ethers.formatEther(balance));
           } catch (balanceError) {
-            console.error('Error fetching bound address balance:', balanceError);
-            setLinkedAddressAmount('0');
+            console.warn('Could not fetch Rootstock balance:', balanceError);
           }
         } else {
-          // Clear localStorage if not bound
           localStorage.removeItem("rootstockAddress");
           setLinkedAddressAmount('0');
         }
@@ -558,9 +530,7 @@ export const useWallet = (): WalletHookReturn => {
       
       if (connectorId) {
         const selectedConnector = connectors.find(c => c.id === connectorId);
-        if (!selectedConnector) {
-          throw new Error('Requested wallet connector not found');
-        }
+        if (!selectedConnector) throw new Error('Wallet connector not found');
         await connect({ connector: selectedConnector });
         await verifyNetwork();
         return;
@@ -575,20 +545,14 @@ export const useWallet = (): WalletHookReturn => {
         }
       }
 
-      if (availableConnectors.length > 0) {
-        if (availableConnectors.length === 1) {
-          await connect({ connector: availableConnectors[0] });
-          await verifyNetwork();
-        } else {
-          throw new Error('Multiple wallets detected. Please specify which wallet to connect.');
-        }
+      if (availableConnectors.length === 1) {
+        await connect({ connector: availableConnectors[0] });
+        await verifyNetwork();
       } else {
-        throw new Error('No wallet connectors available');
+        throw new Error('Specify which wallet to connect');
       }
     } catch (err: any) {
-      const message = err instanceof Error ? err.message : 'Failed to connect wallet';
-      setError(message);
-      console.error('Connection error:', err);
+      setError(err.message || 'Failed to connect wallet');
     }
   };
 
@@ -604,50 +568,80 @@ export const useWallet = (): WalletHookReturn => {
 
   const validateBitmaskAddress = (address: string): boolean => {
     if (!address || address.length < 8 || address.length > 64) {
-      setError('Invalid Bitmask address format');
+      setError('Invalid Rootstock address format');
       return false;
     }
-    
     setError('');
     return true;
   };
 
   const bindWallet = async (): Promise<void> => {
-    if (!address || !bitmaskAddress || !validateBitmaskAddress(bitmaskAddress)) {
-      return;
-    }
+    if (!address || !bitmaskAddress || !validateBitmaskAddress(bitmaskAddress)) return;
 
     setIsBinding(true);
     setError('');
     
     try {
-      // Store address before binding in case of failure
-      const addressToStore = bitmaskAddress;
-      
+      // First check if user is compliant
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const bridgeContract = new ethers.Contract(
+        CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE,
+        bitRWABridgeABI,
+        provider
+      );
+
+      const isCompliant = await bridgeContract.isCompliant(address);
+      if (!isCompliant) {
+        throw new Error('Your wallet is not compliant. Please contact support to be whitelisted.');
+      }
+
+      // Bind the Rootstock address to the current Ethereum user
+      console.log(`🔗 Binding Rootstock address ${bitmaskAddress} to Ethereum user ${address}...`);
       await writeContractAsync({
         address: CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE as `0x${string}`,
         abi: bitRWABridgeABI,
         functionName: 'bindBitmaskWallet',
-        args: [bitmaskAddress],
+        args: [bitmaskAddress], // This is the Rootstock address
       });
       
-      // Only update state and localStorage after successful transaction
       setIsBound(true);
-      localStorage.setItem("rootstockAddress", addressToStore);
+      localStorage.setItem("rootstockAddress", bitmaskAddress);
       
-      // Fetch balance for the newly bound address
+      // Update linked address balance (Rootstock balance)
       try {
         const rskProvider = new ethers.JsonRpcProvider(NETWORKS.ROOTSTOCK_TESTNET.rpcUrls[0]);
-        const balance = await rskProvider.getBalance(addressToStore);
+        const balance = await rskProvider.getBalance(bitmaskAddress);
         setLinkedAddressAmount(ethers.formatEther(balance));
       } catch (balanceError) {
-        console.error('Error fetching balance after binding:', balanceError);
-        setLinkedAddressAmount('0');
+        console.warn('Could not fetch Rootstock balance:', balanceError);
       }
-      
+
+      console.log('✅ Rootstock wallet bound successfully');
     } catch (err: any) {
-      setError(`Failed to bind wallets: ${err.message || 'Please try again.'}`);
-      console.error('Binding error:', err);
+      console.error('Bind wallet error:', err);
+      
+      // Handle specific contract errors
+      if (err?.data) {
+        try {
+          const iface = new ethers.Interface(bitRWABridgeABI);
+          const decodedError = iface.parseError(err.data);
+          
+          switch (decodedError?.name) {
+            case 'NotCompliant':
+              setError('Your wallet is not compliant. Please contact support to be whitelisted.');
+              break;
+            case 'InvalidWalletAddress':
+              setError('Invalid Rootstock wallet address format.');
+              break;
+            default:
+              setError(`Failed to bind wallet: ${decodedError?.name}`);
+          }
+        } catch (decodeError) {
+          setError(`Failed to bind wallets: ${err.message || 'Please try again.'}`);
+        }
+      } else {
+        setError(`Failed to bind wallets: ${err.message || 'Please try again.'}`);
+      }
     } finally {
       setIsBinding(false);
     }
@@ -656,23 +650,18 @@ export const useWallet = (): WalletHookReturn => {
   const testContracts = async () => {
     console.group('Contract Connection Tests');
     try {
-      if (!address) {
-        throw new Error('No connected address');
-      }
-  //@ts-ignore
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      if (!address) throw new Error('No connected address');
+      
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
       const network = await provider.getNetwork();
-        //@ts-ignore
-      const config = network.chainId === 1 || network.chainId === 30 ? 
-        CONTRACT_CONFIG.MAINNET || {} : 
-        CONTRACT_CONFIG.TESTNET;
+      const config = Number(network.chainId) === 1 || Number(network.chainId) === 30 ? 
+        CONTRACT_CONFIG.MAINNET : CONTRACT_CONFIG.TESTNET;
 
-      // Test ONDO Token
-        //@ts-ignore
+        // @ts-ignore
       if (config.ONDO_TOKEN) {
         try {
           const ondo = new ethers.Contract(
-              //@ts-ignore
+            // @ts-ignore
             config.ONDO_TOKEN,
             [
               'function balanceOf(address) view returns (uint256)',
@@ -687,24 +676,16 @@ export const useWallet = (): WalletHookReturn => {
             ondo.symbol(),
             ondo.decimals()
           ]);
-          console.log('ONDO Contract:');
-          console.log('Name:', name);
-          console.log('Symbol:', symbol);
-          console.log('Decimals:', decimals);
-          
-          const balance = await ondo.balanceOf(address);
-          console.log('Your ONDO Balance:', ethers.formatUnits(balance, decimals));
+          console.log('ONDO Contract:', { name, symbol, decimals });
         } catch (e) {
           console.error('ONDO Test Failed:', e);
         }
       }
-
-      // Test Bridge Contract
-        //@ts-ignore
+// @ts-ignore
       if (config.BITRWA_BRIDGE) {
         try {
           const bridge = new ethers.Contract(
-              //@ts-ignore
+            // @ts-ignore
             config.BITRWA_BRIDGE,
             bitRWABridgeABI,
             provider
@@ -723,31 +704,65 @@ export const useWallet = (): WalletHookReturn => {
   };
 
   useEffect(() => {
-      //@ts-ignore
-    if (!window.ethereum) return;
+    if (!(window as any).ethereum) return;
 
-    const handleAccountsChanged = (accounts: string[]): void => {
-      if (accounts.length === 0) {
-        disconnectWallet();
-      }
+    const handleAccountsChanged = (accounts: string[]) => {
+      if (accounts.length === 0) disconnectWallet();
     };
 
-    const handleChainChanged = (chainId: string): void => {
+    const handleChainChanged = (chainId: string) => {
       setCurrentChainId(chainId);
       window.location.reload();
     };
-  //@ts-ignore
-    window.ethereum.on('accountsChanged', handleAccountsChanged);
-      //@ts-ignore
-    window.ethereum.on('chainChanged', handleChainChanged);
+
+    (window as any).ethereum.on('accountsChanged', handleAccountsChanged);
+    (window as any).ethereum.on('chainChanged', handleChainChanged);
 
     return () => {
-        //@ts-ignore
-      window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
-        //@ts-ignore
-      window.ethereum?.removeListener('chainChanged', handleChainChanged);
+      (window as any).ethereum?.removeListener('accountsChanged', handleAccountsChanged);
+      (window as any).ethereum?.removeListener('chainChanged', handleChainChanged);
     };
   }, [isConnected]);
+
+  const checkBridgeStatus = useCallback(async (amount: string, tokenHolderAddress?: string): Promise<{ canBridge: boolean; reason: string; fee?: string }> => {
+    try {
+      if (!CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE) return { canBridge: false, reason: 'Bridge configuration error' };
+      if (!address) return { canBridge: false, reason: 'Please connect your wallet' };
+
+      const ondoAmountWei = ethers.parseUnits(amount, 18);
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const bridgeContract = new ethers.Contract(
+        CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE,
+        bitRWABridgeABI,
+        provider
+      );
+
+      console.log('🔍 Checking bridge preconditions...');
+      const [canBridge, reason] = await bridgeContract.canBridge(address, tokenHolderAddress || address, ondoAmountWei);
+      
+      if (!canBridge) {
+        return { canBridge: false, reason };
+      }
+
+      console.log('✅ All preconditions met');
+
+      let fee: string | undefined;
+      try {
+        console.log('💰 Calculating required fee...');
+        const requiredFee = await bridgeContract.getRequiredFee(ondoAmountWei);
+        fee = ethers.formatEther(requiredFee);
+        console.log('Required fee:', fee, 'ETH');
+      } catch (feeError) {
+        console.warn('Could not get dynamic fee, using fallback:', feeError);
+        fee = '0.1'; // Fallback fee
+      }
+
+      return { canBridge, reason, fee };
+    } catch (error) {
+      console.error('Error checking bridge status:', error);
+      return { canBridge: false, reason: 'An error occurred' };
+    }
+  }, [address]);
 
   return {
     address,
@@ -764,7 +779,7 @@ export const useWallet = (): WalletHookReturn => {
     walletName: activeConnector?.name || (isInjectedWallet ? 'Browser Wallet' : 'Not Connected'),
     isInjectedWallet,
     availableConnectors,
-    linkedAddressAmount, // Now matches component expectation
+    linkedAddressAmount,
     fetchBalances,
     currentChainId,
     currentNetwork,
@@ -772,6 +787,8 @@ export const useWallet = (): WalletHookReturn => {
     switchNetwork,
     lockAndBridge,
     isLocking,
-    lockError
+    lockError,
+    approveOndoForBridge,
+    checkBridgeStatus
   };
 };

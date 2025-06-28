@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useWallet } from '../hooks/useWallet';
 import './WalletConnect.css';
+import { ethers } from 'ethers';
+
+// ERC20 ABI with approve function
+const erc20Abi = [
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function totalSupply() view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function transferFrom(address from, address to, uint256 amount) returns (bool)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+  "event Approval(address indexed owner, address indexed spender, uint256 value)"
+];
 
 interface TokenBalance {
   symbol: string;
@@ -29,14 +45,18 @@ export const WalletConnect: React.FC = () => {
     fetchBalances,
     lockAndBridge,
     isLocking,
+    approveOndoForBridge,
   } = useWallet();
 
   const [isLoading, setIsLoading] = useState(false);
   const [showWalletSelector, setShowWalletSelector] = useState(false);
+  const [lockAmount, setLockAmount] = useState('');
+  const [ondoTokenHolderAddress, setOndoTokenHolderAddress] = useState('');
   const [tokenBalances, setTokenBalances] = useState<TokenBalance[]>([]);
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
-  const [lockAmount, setLockAmount] = useState('');
+  const [usdyBalanceForInput, setUsdyBalanceForInput] = useState<string | null>(null);
+  const [usdyBalanceLoading, setUsdyBalanceLoading] = useState(false);
 
   const fetchTokenBalances = async (ethAddress: string) => {
     if (!ethAddress || !bitmaskAddress) {
@@ -48,10 +68,36 @@ export const WalletConnect: React.FC = () => {
     setBalanceError(null);
 
     try {
+      // Get balances for the connected wallet
       const balances = await fetchBalances(ethAddress, bitmaskAddress);
-      const nonZeroBalances = balances.filter(b => b.balance !== '0');
-      setTokenBalances(nonZeroBalances.length ? nonZeroBalances : balances);
-    } catch (err) {
+      
+      // If there's a specific USDY token holder address, also check that wallet's balance
+      if (ondoTokenHolderAddress && ondoTokenHolderAddress !== ethAddress) {
+        const usdyTokenAddress = "0x717C3087fe043A4C9455142148932b94562D1244";
+        // @ts-ignore
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const usdyTokenContract = new ethers.Contract(usdyTokenAddress, erc20Abi, provider);
+        const usdyBalance = await usdyTokenContract.balanceOf(ondoTokenHolderAddress);
+        
+        // Merge balances, prioritizing the token holder's USDY balance
+        const mergedBalances = balances.map(balance => {
+          if (balance.symbol === 'USDY') {
+            return {
+              ...balance,
+              balance: ethers.formatUnits(usdyBalance, 18),
+              originalSymbol: 'USDY (from token holder)'
+            };
+          }
+          return balance;
+        });
+        
+        const nonZeroBalances = mergedBalances.filter(b => b.balance !== '0');
+        setTokenBalances(nonZeroBalances.length ? nonZeroBalances : mergedBalances);
+      } else {
+        const nonZeroBalances = balances.filter(b => b.balance !== '0');
+        setTokenBalances(nonZeroBalances.length ? nonZeroBalances : balances);
+      }
+    } catch (err: any) {
       console.error('Error fetching balances:', err);
       setBalanceError('Failed to load balances. Please try again.');
       setTokenBalances([]);
@@ -117,12 +163,19 @@ export const WalletConnect: React.FC = () => {
     }
   }, [isConnected, address, isBound, bitmaskAddress]);
 
+  // Refetch balances when ONDO token holder address changes
+  useEffect(() => {
+    if (isConnected && address && isBound && bitmaskAddress) {
+      fetchTokenBalances(address);
+    }
+  }, [ondoTokenHolderAddress]);
+
   const handleConnect = async (connectorId?: string) => {
     setIsLoading(true);
     try {
       await connectWallet(connectorId);
       setShowWalletSelector(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Connection error:', err);
     } finally {
       setIsLoading(false);
@@ -142,20 +195,101 @@ export const WalletConnect: React.FC = () => {
 
   const handleLockAssets = async () => {
     if (!lockAmount || !bitmaskAddress) return;
-    try {
-      const rootstockAddress = localStorage.getItem("rootstockAddress") || bitmaskAddress;
-      console.log({lockAmount})
-   
-      await lockAndBridge(lockAmount);
-      setLockAmount('');
-      alert('Assets locked successfully!');
-      console.log(`Locking ${lockAmount} ONDO for Rootstock address ${rootstockAddress}`);
     
-      await fetchTokenBalances(address!);
+    try {
+      console.log('🔍 Starting bridge process...');
 
-    } catch (err) {
+      // Get token holder address
+      const ondoTokenHolder = ondoTokenHolderAddress || address!;
+      
+      try {
+        // Call lockAndBridge directly (which will check allowance and throw INSUFFICIENT_ALLOWANCE if needed)
+        console.log('🌉 Proceeding with bridge transaction...');
+        const txHash = await lockAndBridge(lockAmount, ondoTokenHolder);
+        console.log('✅ Bridge transaction successful:', txHash);
+        
+        setLockAmount('');
+        await fetchTokenBalances(address!);
+        
+        // Show success message
+        alert(`Bridge transaction successful! Transaction hash: ${txHash}`);
+      } catch (bridgeError: any) {
+        // Check if this is an allowance error
+        if (bridgeError.message === 'INSUFFICIENT_ALLOWANCE') {
+          console.log('🔄 Insufficient allowance detected, requesting approval...');
+          
+          // Request approval using the approveOndoForBridge function
+          try {
+            console.log('📝 Requesting token approval...');
+            const approvalTxHash = await approveOndoForBridge(lockAmount, ondoTokenHolder);
+            console.log('✅ Approval transaction sent:', approvalTxHash);
+            
+            // Wait for approval confirmation
+            const provider = new ethers.BrowserProvider((window as any).ethereum);
+            const receipt = await provider.waitForTransaction(approvalTxHash);
+            if (receipt) {
+              console.log('✅ Approval confirmed in block:', receipt.blockNumber);
+            }
+            
+            // Now try the bridge transaction again
+            console.log('🌉 Retrying bridge transaction after approval...');
+            const txHash = await lockAndBridge(lockAmount, ondoTokenHolder);
+            console.log('✅ Bridge transaction successful:', txHash);
+            
+            setLockAmount('');
+            await fetchTokenBalances(address!);
+            
+            // Show success message
+            alert(`Bridge transaction successful! Transaction hash: ${txHash}`);
+          } catch (approvalError: any) {
+            console.error('Approval error:', approvalError);
+            
+            if (approvalError.code === 4001) {
+              alert('Approval was rejected by user');
+            } else {
+              alert(`Approval failed: ${approvalError.message}`);
+            }
+          }
+        } else {
+          // Re-throw other errors
+          throw bridgeError;
+        }
+      }
+      
+    } catch (err: any) {
       console.error('Error locking assets:', err);
-      alert('Failed to lock assets');
+      alert(`Error: ${err.message}`);
+    }
+  };
+
+  const getUsdyBalanceForInput = async () => {
+    setUsdyBalanceLoading(true);
+    setUsdyBalanceForInput(null);
+    try {
+      // Get connected wallet address
+      if (!address) throw new Error('No wallet connected');
+      // Use the address entered by the user as the holder address
+      const holderAddress = ondoTokenHolderAddress;
+      if (!holderAddress || !ethers.isAddress(holderAddress)) throw new Error('Invalid address');
+      // Get network and USDY token address
+      // @ts-ignore
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const network = await provider.getNetwork();
+      const USDY_ADDRESSES: Record<number, string> = {
+        1: '0x...mainnet', // Mainnet address (replace with real one)
+        11155111: '0x717C3087fe043A4C9455142148932b94562D1244', // Sepolia
+      };
+      const usdyTokenAddress = USDY_ADDRESSES[Number(network.chainId)];
+      if (!usdyTokenAddress) throw new Error('USDY token not deployed on this network');
+      // Get balance
+      const usdyToken = new ethers.Contract(usdyTokenAddress, erc20Abi, provider);
+      const balance = await usdyToken.balanceOf(holderAddress);
+      const decimals = await usdyToken.decimals();
+      setUsdyBalanceForInput(ethers.formatUnits(balance, decimals));
+    } catch (err: any) {
+      setUsdyBalanceForInput('Error');
+    } finally {
+      setUsdyBalanceLoading(false);
     }
   };
 
@@ -215,7 +349,7 @@ export const WalletConnect: React.FC = () => {
                 </div>
               </div>
 
-              <div className="bridge-interface compact">
+              <div className="bridge-interface compact" style={{marginBottom: "-40px"}}>
                 <div className="assets-section compact">
                   <h3 className="section-title compact">Assets</h3>
                   <div className="asset-cards">
@@ -224,10 +358,26 @@ export const WalletConnect: React.FC = () => {
                 </div>
 
                 <div className="lock-section compact">
-                  <h3 className="section-title compact">Bridge</h3>
+                  <h3 className="section-title compact">Bridge</h3>        
                   <div className="lock-form compact">
                     <div className="form-group compact">
-                      <label>Amount (ONDO)</label>
+                      <label>USDY Token Holder Address (Optional)</label>
+                      <input
+                        type="text"
+                        value={ondoTokenHolderAddress}
+                        onChange={(e) => setOndoTokenHolderAddress(e.target.value)}
+                        placeholder={address || "Enter wallet address that holds USDY tokens"}
+                        className={`form-input compact ${ondoTokenHolderAddress && !ethers.isAddress(ondoTokenHolderAddress) ? 'error' : ''}`}
+                      />
+                      <div className="balance-hint compact">
+                        Leave empty to use your connected wallet ({address?.substring(0, 6)}...{address?.substring(address.length - 4)})
+                      </div>
+                      {ondoTokenHolderAddress && !ethers.isAddress(ondoTokenHolderAddress) && (
+                        <div className="error-message compact">Invalid Ethereum address format</div>
+                      )}
+                    </div>
+                    <div className="form-group compact">
+                      <label>Amount (USDY)</label>
                       <div className="amount-input-container">
                         <input
                           type="number"
@@ -239,21 +389,39 @@ export const WalletConnect: React.FC = () => {
                         <button
                           className="max-button compact"
                           onClick={() => {
-                            const ondoBalance = tokenBalances.find(b => b.symbol === 'ONDO')?.balance || '0';
-                            setLockAmount(ondoBalance);
+                            const usdyBalance = tokenBalances.find(b => b.symbol === 'USDY')?.balance || '0';
+                            setLockAmount(usdyBalance);
                           }}
                         >
                           MAX
                         </button>
                       </div>
                       <div className="balance-hint compact">
-                        Available: {tokenBalances.find(b => b.symbol === 'ONDO')?.balance || '0'} ONDO
+                        Available: {tokenBalances.find(b => b.symbol === 'USDY')?.balance || '0'} USDY
+                        {ondoTokenHolderAddress && ondoTokenHolderAddress !== address && (
+                          <span> (from {ondoTokenHolderAddress.substring(0, 6)}...{ondoTokenHolderAddress.substring(ondoTokenHolderAddress.length - 4)})</span>
+                        )}
                       </div>
+                      {ondoTokenHolderAddress && (
+                        <button
+                          onClick={getUsdyBalanceForInput}
+                          disabled={usdyBalanceLoading || !ethers.isAddress(ondoTokenHolderAddress)}
+                          className="debug-button compact"
+                          style={{ marginTop: '8px', fontSize: '12px', padding: '4px 8px', backgroundColor: '#4CAF50' }}
+                        >
+                          {usdyBalanceLoading ? 'Checking...' : 'Get USDY Balance for Address'}
+                        </button>
+                      )}
                     </div>
+                    {usdyBalanceForInput !== null && (
+                      <div style={{ marginTop: 8 }}>
+                        USDY Balance for {ondoTokenHolderAddress}: {usdyBalanceForInput}
+                      </div>
+                    )}
                     <button
                       onClick={handleLockAssets}
                       className="lock-button"
-                      disabled={!lockAmount || isLocking}
+                      disabled={!lockAmount || isLocking || Boolean(ondoTokenHolderAddress && !ethers.isAddress(ondoTokenHolderAddress))}
                     >
                       {isLocking ? (
                         <>

@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/abis/bitRWABridgeABI.ts","./src/components/WalletConnect.tsx","./src/hooks/useWallet.ts","./src/utils/web3modal.ts"],"version":"5.8.3"}

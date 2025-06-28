@@ -1,4 +1,4 @@
-import { createConfig, configureChains } from 'wagmi'
+import { createConfig } from 'wagmi'
 import { publicProvider } from 'wagmi/providers/public'
 import { InjectedConnector } from 'wagmi/connectors/injected'
 import { Chain } from 'wagmi/chains'
