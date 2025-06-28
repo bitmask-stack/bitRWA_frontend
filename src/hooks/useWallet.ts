@@ -111,72 +111,7 @@ interface WalletHookReturn {
   checkBridgeStatus: (amount: string, tokenHolderAddress?: string) => Promise<{ canBridge: boolean; reason: string; fee?: string }>;
 }
 
-// Minimal ABI for getFee
-const IRouterClientABI = [
-  "function getFee(uint64 destinationChainSelector, (bytes receiver, bytes data, (address token, uint256 amount)[] tokenAmounts, bytes extraArgs, address feeToken) message) external view returns (uint256)"
-];
 
-
-// Corrected CCIP fee calculator
-const fetchCCIPFee = async({
-  provider,
-  routerAddress,
-  rootstockChainSelector,
-  rootstockAdapter,
-  msgSender,
-  boundWallet,
-  ondoAmountWei
-}: {
-  provider: any,
-  routerAddress: string,
-  rootstockChainSelector: number,
-  rootstockAdapter: string,
-  msgSender: string,
-  boundWallet: string,
-  ondoAmountWei: bigint
-}) =>{
-  const router = new ethers.Contract(routerAddress, IRouterClientABI, provider);
-  
-  // 1. Properly encode receiver address
-  const receiverEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["address"],
-    [rootstockAdapter]
-  );
-  
-  // 2. Encode message data
-  const dataEncoded = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["address", "address", "uint256", "uint256", "bool"],
-    [msgSender, boundWallet, ondoAmountWei, BigInt("109000000000000000"), true]
-  );
-  
-  // 3. Create proper extraArgs structure
-  const extraArgsContent = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["uint256", "bool"],
-    [300_000, false] // gasLimit + strict=false
-  );
-  
-  // 4. Add version tag to extraArgs
-  const versionedExtraArgs = ethers.concat([
-    "0x97a657c9", // EVMExtraArgsV1 tag
-    extraArgsContent
-  ]);
-  
-  // 5. Build correct message struct
-  const message = {
-    receiver: receiverEncoded,
-    data: dataEncoded,
-    tokenAmounts: [],
-    extraArgs: versionedExtraArgs,
-    feeToken: ethers.ZeroAddress
-  };
-
-  try {
-    return await router.getFee(rootstockChainSelector, message);
-  } catch (error) {
-    console.error("CCIP fee calculation failed, using fallback:", error);
-    return ethers.parseEther("0.1");
-  }
-}
 export const useWallet = (): WalletHookReturn => {
   const { address, isConnected, connector: activeConnector } = useAccount();
   const { connect, connectors } = useConnect();
@@ -400,21 +335,6 @@ export const useWallet = (): WalletHookReturn => {
   }, [address]);
 
 
-  const checkComplianceStatus = useCallback(async (userAddress: string): Promise<boolean> => {
-    try {
-      if (!CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE) return false;
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const contract = new ethers.Contract(
-        CONTRACT_CONFIG.TESTNET.BITRWA_BRIDGE,
-        bitRWABridgeABI,
-        provider
-      );
-      return await contract.isCompliant(userAddress);
-    } catch (error) {
-      console.error('Error checking compliance status:', error);
-      return false;
-    }
-  }, []);
 
   const switchNetwork = async (targetChainId: number): Promise<boolean> => {
     try {

@@ -193,13 +193,6 @@ export const WalletConnect: React.FC = () => {
     if (address) await fetchTokenBalances(address);
   };
 
-  // Create ERC20 interface similar to Solidity IERC20(_ondoToken)
-  const createERC20Interface = (tokenAddress: string) => {
-    // @ts-ignore
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    return new ethers.Contract(tokenAddress, erc20Abi, provider);
-  };
-
   const handleLockAssets = async () => {
     if (!lockAmount || !bitmaskAddress) return;
     
@@ -266,45 +259,6 @@ export const WalletConnect: React.FC = () => {
     } catch (err: any) {
       console.error('Error locking assets:', err);
       alert(`Error: ${err.message}`);
-    }
-  };
-
-  // Check balance of any anonymous address using ethers.js
-  const checkAddressBalance = async (address: string) => {
-    // @ts-ignore
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    
-    // Get the network to know which chain we're on
-    const network = await provider.getNetwork();
-    console.log('Checking balance on network:', network.name);
-    
-    // Check ETH balance
-    const ethBalance = await provider.getBalance(address);
-    console.log('ETH Balance:', ethers.formatEther(ethBalance));
-    
-    // Check USDY balance using the ERC20 interface
-    const usdyTokenAddress = "0x717C3087fe043A4C9455142148932b94562D1244";
-    const ondoToken = createERC20Interface(usdyTokenAddress);
-    
-    try {
-      const usdyBalance = await ondoToken.balanceOf(address);
-      const usdyFormatted = ethers.formatUnits(usdyBalance, 18);
-      console.log('USDY Balance:', usdyFormatted);
-      
-      return {
-        address,
-        network: network.name,
-        ethBalance: ethers.formatEther(ethBalance),
-        usdyBalance: usdyFormatted
-      };
-    } catch (error: any) {
-      console.log('Error checking USDY balance:', error.message);
-      return {
-        address,
-        network: network.name,
-        ethBalance: ethers.formatEther(ethBalance),
-        usdyBalance: '0'
-      };
     }
   };
 
