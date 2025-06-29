@@ -57,6 +57,7 @@ export const WalletConnect: React.FC = () => {
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [usdyBalanceForInput, setUsdyBalanceForInput] = useState<string | null>(null);
   const [usdyBalanceLoading, setUsdyBalanceLoading] = useState(false);
+  const [lastBridgeTx, setLastBridgeTx] = useState<string | null>(null);
 
   const fetchTokenBalances = async (ethAddress: string) => {
     if (!ethAddress || !bitmaskAddress) {
@@ -70,7 +71,7 @@ export const WalletConnect: React.FC = () => {
     try {
       // Get balances for the connected wallet
       const balances = await fetchBalances(ethAddress, bitmaskAddress);
-      
+
       // If there's a specific USDY token holder address, also check that wallet's balance
       if (ondoTokenHolderAddress && ondoTokenHolderAddress !== ethAddress) {
         const usdyTokenAddress = "0x717C3087fe043A4C9455142148932b94562D1244";
@@ -78,7 +79,7 @@ export const WalletConnect: React.FC = () => {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const usdyTokenContract = new ethers.Contract(usdyTokenAddress, erc20Abi, provider);
         const usdyBalance = await usdyTokenContract.balanceOf(ondoTokenHolderAddress);
-        
+
         // Merge balances, prioritizing the token holder's USDY balance
         const mergedBalances = balances.map(balance => {
           if (balance.symbol === 'USDY') {
@@ -90,7 +91,7 @@ export const WalletConnect: React.FC = () => {
           }
           return balance;
         });
-        
+
         const nonZeroBalances = mergedBalances.filter(b => b.balance !== '0');
         setTokenBalances(nonZeroBalances.length ? nonZeroBalances : mergedBalances);
       } else {
@@ -195,55 +196,61 @@ export const WalletConnect: React.FC = () => {
 
   const handleLockAssets = async () => {
     if (!lockAmount || !bitmaskAddress) return;
-    
+
     try {
-      console.log('🔍 Starting bridge process...');
+      console.log('🔍 Starting Fbridge process...');
 
       // Get token holder address
       const ondoTokenHolder = ondoTokenHolderAddress || address!;
-      
+
       try {
         // Call lockAndBridge directly (which will check allowance and throw INSUFFICIENT_ALLOWANCE if needed)
         console.log('🌉 Proceeding with bridge transaction...');
         const txHash = await lockAndBridge(lockAmount, ondoTokenHolder);
         console.log('✅ Bridge transaction successful:', txHash);
-        
+
         setLockAmount('');
         await fetchTokenBalances(address!);
-        
+
+        setLastBridgeTx(txHash);
+
         // Show success message
         alert(`Bridge transaction successful! Transaction hash: ${txHash}`);
+
       } catch (bridgeError: any) {
         // Check if this is an allowance error
         if (bridgeError.message === 'INSUFFICIENT_ALLOWANCE') {
           console.log('🔄 Insufficient allowance detected, requesting approval...');
-          
+
           // Request approval using the approveOndoForBridge function
           try {
             console.log('📝 Requesting token approval...');
             const approvalTxHash = await approveOndoForBridge(lockAmount, ondoTokenHolder);
             console.log('✅ Approval transaction sent:', approvalTxHash);
-            
+
             // Wait for approval confirmation
             const provider = new ethers.BrowserProvider((window as any).ethereum);
             const receipt = await provider.waitForTransaction(approvalTxHash);
             if (receipt) {
               console.log('✅ Approval confirmed in block:', receipt.blockNumber);
             }
-            
+
             // Now try the bridge transaction again
             console.log('🌉 Retrying bridge transaction after approval...');
             const txHash = await lockAndBridge(lockAmount, ondoTokenHolder);
             console.log('✅ Bridge transaction successful:', txHash);
-            
+
             setLockAmount('');
             await fetchTokenBalances(address!);
-            
+
+
+            setLastBridgeTx(txHash);
+
             // Show success message
             alert(`Bridge transaction successful! Transaction hash: ${txHash}`);
           } catch (approvalError: any) {
             console.error('Approval error:', approvalError);
-            
+
             if (approvalError.code === 4001) {
               alert('Approval was rejected by user');
             } else {
@@ -255,7 +262,7 @@ export const WalletConnect: React.FC = () => {
           throw bridgeError;
         }
       }
-      
+
     } catch (err: any) {
       console.error('Error locking assets:', err);
       alert(`Error: ${err.message}`);
@@ -349,7 +356,7 @@ export const WalletConnect: React.FC = () => {
                 </div>
               </div>
 
-              <div className="bridge-interface compact" style={{marginBottom: "-40px"}}>
+              <div className="bridge-interface compact" style={{ marginBottom: "-40px" }}>
                 <div className="assets-section compact">
                   <h3 className="section-title compact">Assets</h3>
                   <div className="asset-cards">
@@ -358,7 +365,17 @@ export const WalletConnect: React.FC = () => {
                 </div>
 
                 <div className="lock-section compact">
-                  <h3 className="section-title compact">Bridge</h3>        
+                  <h3 className="section-title compact">Bridge</h3>
+                  {lastBridgeTx && (
+                    <a
+                      href={`https://ccip.chain.link/tx/${lastBridgeTx}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ccip-link"
+                    >
+                      View Status
+                    </a>
+                  )}
                   <div className="lock-form compact">
                     <div className="form-group compact">
                       <label>USDY Token Holder Address (Optional)</label>
@@ -554,27 +571,27 @@ export const WalletConnect: React.FC = () => {
     <div className="wallet-container compact">
       {!showWalletSelector && (
         <div className="wallet-card compact">
-        <div className="wallet-header compact" style={{ marginTop: "-20px" }}>
-  <div className="header-content" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      {/* <span className="bridge-icon">↔</span> */}
-      <h2 className="compact" style={{ margin: 0 }}>
-        {isConnected && isBound ? "Asset Bridge" : "Connect Wallet to Begin"}
-      </h2>
-    </div>
-    <p className="subtitle compact" >
-      {isConnected && isBound ? (
-        <span className="chain-indicator" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span className="chain-badge eth">ETH</span>
-          <span>→</span>
-          <span className="chain-badge rsk" style={{background: "#ffcb12", color: "#333"}}>RSK(BTC)</span>
-        </span>
-      ) : (
-        ""
-      )}
-    </p>
-  </div>
-</div>
+          <div className="wallet-header compact" style={{ marginTop: "-20px" }}>
+            <div className="header-content" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* <span className="bridge-icon">↔</span> */}
+                <h2 className="compact" style={{ margin: 0 }}>
+                  {isConnected && isBound ? "Asset Bridge" : "Connect Wallet to Begin"}
+                </h2>
+              </div>
+              <p className="subtitle compact" >
+                {isConnected && isBound ? (
+                  <span className="chain-indicator" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className="chain-badge eth">ETH</span>
+                    <span>→</span>
+                    <span className="chain-badge rsk" style={{ background: "#ffcb12", color: "#333" }}>RSK(BTC)</span>
+                  </span>
+                ) : (
+                  ""
+                )}
+              </p>
+            </div>
+          </div>
           {renderMainContent()}
         </div>
       )}
