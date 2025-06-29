@@ -209,10 +209,17 @@ export const WalletConnect: React.FC = () => {
         const txHash = await lockAndBridge(lockAmount, ondoTokenHolder);
         console.log('✅ Bridge transaction successful:', txHash);
 
+        
+// Wait for confirmation before fetching balances
+const provider = new ethers.BrowserProvider((window as any).ethereum);
+const receipt = await provider.waitForTransaction(txHash);
+console.log('✅ Bridge transaction mined in block:', receipt?.blockNumber);
+
         setLockAmount('');
         await fetchTokenBalances(address!);
 
         setLastBridgeTx(txHash);
+        localStorage.setItem("txHash", txHash)
 
         // Show success message
         alert(`Bridge transaction successful! Transaction hash: ${txHash}`);
@@ -245,6 +252,7 @@ export const WalletConnect: React.FC = () => {
 
 
             setLastBridgeTx(txHash);
+            localStorage.setItem("txHash", txHash)
 
             // Show success message
             alert(`Bridge transaction successful! Transaction hash: ${txHash}`);
@@ -344,9 +352,10 @@ export const WalletConnect: React.FC = () => {
   };
 
   const renderMainContent = () => {
+    const _txHash = lastBridgeTx ?? localStorage.getItem("txHash");
     if (isConnected) {
       return (
-        <div className="connected-section compact">
+        <div className="connected-section compact" >
           {isBound ? (
             <div className="bound-status compact">
               <div className="bound-header compact">
@@ -366,9 +375,9 @@ export const WalletConnect: React.FC = () => {
 
                 <div className="lock-section compact">
                   <h3 className="section-title compact">Bridge</h3>
-                  {lastBridgeTx && (
+                  {_txHash && (
                     <a
-                      href={`https://ccip.chain.link/tx/${lastBridgeTx}`}
+                      href={`https://ccip.chain.link/tx/${_txHash}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="ccip-link"
@@ -572,7 +581,7 @@ export const WalletConnect: React.FC = () => {
       {!showWalletSelector && (
         <div className="wallet-card compact">
           <div className="wallet-header compact" style={{ marginTop: "-20px" }}>
-            <div className="header-content" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <div className="header-content"  style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {/* <span className="bridge-icon">↔</span> */}
                 <h2 className="compact" style={{ margin: 0 }}>

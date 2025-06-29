@@ -1817,3 +1817,27 @@
   content: '↗';
   font-size: 12px;
 }
+/* Add to WalletConnect.css */
+.wallet-container-edge {
+  width: 100vw;
+  max-width: 100%;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.wallet-container-edge > .wallet-card {
+  border-radius: 0;
+  margin: 0;
+  padding: 20px;
+  box-shadow: none;
+}
+
+@media (max-width: 768px) {
+  .wallet-container-edge {
+    margin-left: -20px;
+    margin-right: -20px;
+    width: calc(100% + 40px);
+  }
+}
