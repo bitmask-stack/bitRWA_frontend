@@ -196,6 +196,7 @@
   cursor: pointer;
   transition: all 0.3s ease;
   width: 100%;
+  height: 50px;
   margin-top: -30px;
 }
 
@@ -1786,4 +1787,33 @@
 .bridge-interface.compact {
   height: auto;
   overflow: visible;
+}
+.bridge-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.ccip-link {
+  color: #4a90e2;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.ccip-link:hover {
+  background-color: rgba(74, 144, 226, 0.1);
+  transform: translateY(-1px);
+}
+
+.ccip-link::after {
+  content: '↗';
+  font-size: 12px;
 }
